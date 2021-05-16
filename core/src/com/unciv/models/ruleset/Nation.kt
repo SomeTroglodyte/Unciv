@@ -5,7 +5,9 @@ import com.unciv.Constants
 import com.unciv.logic.civilization.CityStateType
 import com.unciv.models.stats.INamed
 import com.unciv.models.translations.Translations
+import com.unciv.models.translations.squareBraceRegex
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.CivilopediaText
 import com.unciv.ui.utils.Fonts
 import com.unciv.ui.utils.colorFromRGB
 
@@ -16,7 +18,7 @@ enum class VictoryType {
     Scientific
 }
 
-class Nation : INamed {
+class Nation : INamed, CivilopediaText() {
     override lateinit var name: String
 
     var leaderName = ""
@@ -74,9 +76,12 @@ class Nation : INamed {
         if (innerColor == null) innerColorObject = Color.BLACK
         else innerColorObject = colorFromRGB(innerColor!!)
 
-        forestsAndJunglesAreRoads = uniques.contains("All units move through Forest and Jungle Tiles in friendly territory as if they have roads. These tiles can be used to establish City Connections upon researching the Wheel.")
-        ignoreHillMovementCost = uniques.contains("Units ignore terrain costs when moving into any tile with Hills")
-        embarkDisembarkCosts1 = uniques.contains("Units pay only 1 movement point to embark and disembark")
+        forestsAndJunglesAreRoads =
+            uniques.contains("All units move through Forest and Jungle Tiles in friendly territory as if they have roads. These tiles can be used to establish City Connections upon researching the Wheel.")
+        ignoreHillMovementCost =
+            uniques.contains("Units ignore terrain costs when moving into any tile with Hills")
+        embarkDisembarkCosts1 =
+            uniques.contains("Units pay only 1 movement point to embark and disembark")
     }
 
     lateinit var cities: ArrayList<String>
@@ -109,64 +114,88 @@ class Nation : INamed {
         return textList.joinToString("\n")
     }
 
-    private fun addUniqueBuildingsText(textList: ArrayList<String>, ruleset: Ruleset) {
-        for (building in ruleset.buildings.values
-                .filter { it.uniqueTo == name && "Will not be displayed in Civilopedia" !in it.uniques }) {
+    private fun addUniqueBuildingsText(textList: ArrayList<String>, ruleset: Ruleset, forCivilopediaText: Boolean = false) {
+        for (building in ruleset.buildings.values) {
+            //.filter { it.uniqueTo == name && "Will not be displayed in Civilopedia" !in it.uniques }) {
+            if (building.uniqueTo != name || "Will not be displayed in Civilopedia" in building.uniques) continue
+            val category = if (building.isWonder || building.isNationalWonder) "Wonder" else "Building"
+            val nameAndLink = (if (forCivilopediaText) "[$category/${building.name}] " else "") + building.name.tr()
             if (building.replaces != null && ruleset.buildings.containsKey(building.replaces!!)) {
                 val originalBuilding = ruleset.buildings[building.replaces!!]!!
 
-                textList += building.name.tr() + " - " + "Replaces [${originalBuilding.name}]".tr()
+                if (forCivilopediaText) {
+                    textList += nameAndLink
+                    textList += "[Building/${originalBuilding.name}]  - " + "Replaces [${originalBuilding.name}]".tr()
+                } else {
+                    textList += nameAndLink + " - " + "Replaces [${originalBuilding.name}]".tr()
+                }
                 val originalBuildingStatMap = originalBuilding.toHashMap()
                 for (stat in building.toHashMap())
                     if (stat.value != originalBuildingStatMap[stat.key])
-                        textList += "  " + stat.key.toString().tr() + " " + "[${stat.value.toInt()}] vs [${originalBuildingStatMap[stat.key]!!.toInt()}]".tr()
+                        textList += "  " + stat.key.toString().tr() + " " +
+                            "[${stat.value.toInt()}] vs [${originalBuildingStatMap[stat.key]!!.toInt()}]".tr()
 
                 for (unique in building.uniques.filter { it !in originalBuilding.uniques })
                     textList += "  " + unique.tr()
                 if (building.maintenance != originalBuilding.maintenance)
-                    textList += "  {Maintenance} " + "[${building.maintenance}] vs [${originalBuilding.maintenance}]".tr()
+                    textList += "  " + "{Maintenance} ".tr() + "[${building.maintenance}] vs [${originalBuilding.maintenance}]".tr()
                 if (building.cost != originalBuilding.cost)
-                    textList += "  {Cost} " + "[${building.cost}] vs [${originalBuilding.cost}]".tr()
+                    textList += "  " + "{Cost} ".tr() + "[${building.cost}] vs [${originalBuilding.cost}]".tr()
                 if (building.cityStrength != originalBuilding.cityStrength)
-                    textList += "  {City strength} " + "[${building.cityStrength}] vs [${originalBuilding.cityStrength}]".tr()
+                    textList += "  " + "{City strength} ".tr() + "[${building.cityStrength}] vs [${originalBuilding.cityStrength}]".tr()
                 if (building.cityHealth != originalBuilding.cityHealth)
-                    textList += "  {City health} " + "[${building.cityHealth}] vs [${originalBuilding.cityHealth}]".tr()
+                    textList += "  " + "{City health} ".tr() + "[${building.cityHealth}] vs [${originalBuilding.cityHealth}]".tr()
                 textList += ""
             } else if (building.replaces != null) {
-                textList += building.name.tr() + " - " + "Replaces [${building.replaces}], which is not found in the ruleset!".tr()
-            } else textList += building.getShortDescription(ruleset)
+                textList += nameAndLink + " - " + "Replaces [${building.replaces}], which is not found in the ruleset!".tr()
+            } else {
+                textList += nameAndLink
+                textList += "  " + building.getShortDescription(ruleset)
+            }
         }
     }
 
-    private fun addUniqueUnitsText(textList: ArrayList<String>, ruleset: Ruleset) {
-        for (unit in ruleset.units.values
-                .filter { it.uniqueTo == name && "Will not be displayed in Civilopedia" !in it.uniques }) {
+    private fun addUniqueUnitsText(textList: ArrayList<String>, ruleset: Ruleset, forCivilopediaText: Boolean = false) {
+        for (unit in ruleset.units.values) {
+            if (unit.uniqueTo != name || "Will not be displayed in Civilopedia" in unit.uniques) continue
+            val nameAndLink = (if (forCivilopediaText) "[Unit/${unit.name}] " else "") + unit.name.tr()
             if (unit.replaces != null && ruleset.units.containsKey(unit.replaces!!)) {
                 val originalUnit = ruleset.units[unit.replaces!!]!!
-                textList += unit.name.tr() + " - " + "Replaces [${originalUnit.name}]".tr()
+                if (forCivilopediaText) {
+                    textList += nameAndLink
+                    textList += "[Unit/${originalUnit.name}]  - " + "Replaces [${originalUnit.name}]".tr()
+                } else {
+                    textList += nameAndLink + " - " + "Replaces [${originalUnit.name}]".tr()
+                }
                 if (unit.cost != originalUnit.cost)
-                    textList += "  {Cost} " + "[${unit.cost}] vs [${originalUnit.cost}]".tr()
+                    textList += "  " + "{Cost} ".tr() + "[${unit.cost}] vs [${originalUnit.cost}]".tr()
                 if (unit.strength != originalUnit.strength)
-                    textList += "  ${Fonts.strength} " + "[${unit.strength}] vs [${originalUnit.strength}]".tr()
+                    textList += "  " + "${Fonts.strength} " + "[${unit.strength}] vs [${originalUnit.strength}]".tr()
                 if (unit.rangedStrength != originalUnit.rangedStrength)
-                    textList += "  ${Fonts.rangedStrength} " + "[${unit.rangedStrength}] vs [${originalUnit.rangedStrength}]".tr()
+                    textList += "  " + "${Fonts.rangedStrength} " + "[${unit.rangedStrength}] vs [${originalUnit.rangedStrength}]".tr()
                 if (unit.range != originalUnit.range)
-                    textList += "  ${Fonts.range} " + "[${unit.range}] vs [${originalUnit.range}]".tr()
+                    textList += "  " + "${Fonts.range} " + "[${unit.range}] vs [${originalUnit.range}]".tr()
                 if (unit.movement != originalUnit.movement)
-                    textList += "  ${Fonts.movement} " + "[${unit.movement}] vs [${originalUnit.movement}]".tr()
+                    textList += "  " + "${Fonts.movement} " + "[${unit.movement}] vs [${originalUnit.movement}]".tr()
                 for (resource in originalUnit.getResourceRequirements().keys)
-                    if (!unit.getResourceRequirements().containsKey(resource))
-                        textList += "  " + "[$resource] not required".tr()
+                    if (!unit.getResourceRequirements().containsKey(resource)) {
+                        textList += (if (forCivilopediaText) "[Resource/$resource]  " else "  ") +
+                                "[$resource] not required".tr()
+                    }
                 for (unique in unit.uniques.filterNot { it in originalUnit.uniques })
-                    textList += "  " + Translations.translateBonusOrPenalty(unique)
+                    textList += "  " +  Translations.translateBonusOrPenalty(unique)
                 for (unique in originalUnit.uniques.filterNot { it in unit.uniques })
-                    textList += "  " + "Lost ability".tr() + "(" + "vs [${originalUnit.name}]".tr() + "): " + Translations.translateBonusOrPenalty(unique)
+                    textList += "  " +  "Lost ability".tr() + "(" +
+                            "vs [${originalUnit.name}]".tr() + "): " +
+                            Translations.translateBonusOrPenalty(unique)
                 for (promotion in unit.promotions.filter { it !in originalUnit.promotions })
-                    textList += "  " + promotion.tr() + " (" + Translations.translateBonusOrPenalty(ruleset.unitPromotions[promotion]!!.effect) + ")"
+                    textList += (if (forCivilopediaText) "[Promotion/$promotion]  " else "  ") +
+                        promotion.tr() + " (" +
+                        Translations.translateBonusOrPenalty(ruleset.unitPromotions[promotion]!!.effect) + ")"
             } else if (unit.replaces != null) {
-                textList += unit.name.tr() + " - " + "Replaces [${unit.replaces}], which is not found in the ruleset!".tr()
+                textList += nameAndLink + " - " + "Replaces [${unit.replaces}], which is not found in the ruleset!".tr()
             } else {
-                textList += unit.name.tr()
+                textList += nameAndLink
                 textList += "  " + unit.getDescription(true).split("\n").joinToString("\n  ")
             }
 
@@ -174,14 +203,65 @@ class Nation : INamed {
         }
     }
 
-    private fun addUniqueImprovementsText(textList: ArrayList<String>, ruleset: Ruleset) {
-        for (improvement in ruleset.tileImprovements.values
-                .filter { it.uniqueTo == name }) {
+    private fun addUniqueImprovementsText(textList: ArrayList<String>, ruleset: Ruleset, forCivilopediaText: Boolean = false) {
+        for (improvement in ruleset.tileImprovements.values) {
+            if (improvement.uniqueTo != name ) continue
 
             textList += improvement.name.tr()
-            textList += "  " + improvement.clone().toString()
+            textList += "  " + improvement.clone().toString()   // = (improvement as Stats).toString minus import plus copy overhead
+            if (forCivilopediaText && improvement.terrainsCanBeBuiltOn.isNotEmpty()) {
+                var first = true
+                improvement.terrainsCanBeBuiltOn.forEach {
+                    textList += "[Terrain/$it]  " + (if (first) "{Can be built on }" else " or ") + "{$it}"
+                    first = false
+                }
+            }
             for (unique in improvement.uniques)
                 textList += "  " + unique.tr()
         }
+    }
+
+    override fun getCivilopediaTextHeader(): String {
+        return "(Nation/$name)" + super.getCivilopediaTextHeader()
+    }
+
+    override fun replacesCivilopediaDescription() = true
+    override fun hasCivilopediaTextLines() = true
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
+        val textList = ArrayList<String>()
+
+
+        if (leaderName.isNotEmpty()) {
+            textList += "^ " + getLeaderDisplayName()
+            textList += "(LeaderIcons/$leaderName)@300"
+            textList += ""
+        }
+
+        if (uniqueName != "") textList += "{$uniqueName}:"
+        if (uniqueText != "") {
+            textList += "  {$uniqueText}"
+        } else {
+            uniques.forEach {
+                textList += "  ${it.tr()}"
+            }
+            textList += ""
+        }
+
+        if (startBias.isNotEmpty()) {
+            var first = true
+            startBias.forEach {
+                // can be "Avoid []"
+                val link = if ('[' in it) {
+                    squareBraceRegex.find(it)!!.groups[1]!!.value
+                } else it
+                textList += "[Terrain/$link] " + (if (first) "{Start bias:} " else " ") + it.tr()
+            }
+            textList += ""
+        }
+        addUniqueBuildingsText(textList, ruleset, true)
+        addUniqueUnitsText(textList, ruleset, true)
+        addUniqueImprovementsText(textList, ruleset, true)
+
+        return textList
     }
 }

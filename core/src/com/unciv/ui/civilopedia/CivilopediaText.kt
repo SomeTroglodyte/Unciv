@@ -3,9 +3,11 @@ package com.unciv.ui.civilopedia
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.Actor
+import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.utils.Align
+import com.sun.xml.internal.bind.v2.model.core.NonElement
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.stats.INamed
 import com.unciv.ui.utils.*
@@ -44,7 +46,7 @@ open class CivilopediaText {
      * @return A list of strings conforming to our [formatting rules][FormattingConstants] that will be inserted before
      *         the first line of [civilopediaText] beginning with a [link][FormattingConstants]
      */
-    open fun getCivilopediaTextLines(): List<String> = listOf()
+    open fun getCivilopediaTextLines(ruleset: Ruleset): List<String> = listOf()
 
     /** Override this and return true to tell the Civilopedia that the legacy description is no longer needed */
     open fun replacesCivilopediaDescription() = false
@@ -59,7 +61,7 @@ open class CivilopediaText {
      *
      * @return A new CivilopediaText instance containing original [civilopediaText] lines merged with those from [getCivilopediaTextHeader] and [getCivilopediaTextLines] calls.
      */
-    open fun assembleCivilopediaText(): CivilopediaText {
+    open fun assembleCivilopediaText(ruleset: Ruleset): CivilopediaText {
         val outerLines = civilopediaText.iterator()
         val newLines = sequence {
             var middleDone = false
@@ -75,7 +77,7 @@ open class CivilopediaText {
                     middleDone = true
                     if (hasCivilopediaTextLines()) {
                         if (outerNotEmpty) yield("")
-                        yieldAll(getCivilopediaTextLines())
+                        yieldAll(getCivilopediaTextLines(ruleset))
                         yield("")
                     }
                 }
@@ -84,7 +86,7 @@ open class CivilopediaText {
             }
             if (!middleDone) {
                 if (outerNotEmpty && hasCivilopediaTextLines()) yield("")
-                yieldAll(getCivilopediaTextLines())
+                yieldAll(getCivilopediaTextLines(ruleset))
             }
         }
         val newCivilopediaText = CivilopediaText()
@@ -106,15 +108,16 @@ open class CivilopediaText {
             }
             val formatting = parseFormatting(line)
             val actor = formatting.render(skin, labelWidth)
-            if (formatting.linkTo != null && linkAction != null)
+            if (formatting.linkType == LinkType.Internal && formatting.linkTo!=null && linkAction != null)
                 actor.onClick {
                     linkAction(formatting.linkTo)
                 }
-            else if (line.hasProtocol())
+            else if (formatting.linkType == LinkType.External)
                 actor.onClick {
                     Gdx.net.openURI(line)
                 }
-            table.add(actor).width(labelWidth).row()
+            val align = if (formatting.centered) Align.center else Align.left
+            table.add(actor).width(labelWidth).align(align).row()
         }
         return table.apply { pack() }
     }
@@ -131,14 +134,15 @@ open class CivilopediaText {
     /** ### Formatting rules:
      * A line can start with zero or more of the following formatting instructions, order does not matter:
      *
-     * - **[** `category/entryname` **⁆** (pair of square brackets)- create a civilopedia link (max 1 per line). Renders a link icon and a matching object icon if found.
+     * - **[** `category/entryname` **⁆** (pair of square brackets) - create a civilopedia link (max 1 per line). Renders a link icon and a matching object icon if found.
+     * - **(** `category/entryname` **)** (brackets) - include icon but do not link
      * - **#** (hash)- Increase header level by 1: applies to font size of whole line - 0 is 100% normal, 1=200%, 2=175%, 3=150%, 4=133%, 5=117%, 6=83%, 7=67%, 8=50%.
      * - **+** `######` (plus followed by a 6-digit hex number) - sets colour of whole line or, if set, the star only.
      * - **✯** (U+272F) - Adds a star icon, optionally coloured
      * - **₋** (underscore) - Make whole line italic (_not implemented_)
      * - **✶** (asterisk) - Make whole line bold (_not implemented_)
      * - **~** (tilde) - Make whole line strikethrough (_not implemented_)
-     * - ' ' (space) - Ends formatting explicitly and is not included in the resulting text
+     * - ' ' (space) - Ends formatting explicitly and is not included in the resulting text. 2 or more increases indentation level, which places text at uniform indent independent of icon presence.
      *
      * The first character not matching one of these rules ends formatting, the rest of the string is rendered as text, and goes through translation as is.
      * Icon ordering is always link - object - star.
@@ -157,20 +161,23 @@ open class CivilopediaText {
         const val linkClose = ']'
         const val iconSymbol = '('
         const val iconClose = ')'
+        const val iconSizeSymbol = '@'
         const val headerSymbol = '#'
         const val colorSymbol = '+'
         const val italicSymbol = '_'
         const val boldSymbol = '*'
         const val strikeSymbol = '~'
         const val starredSymbol = '✯'
+        const val centerSymbol = '^'
         const val endFormattingSymbol = ' '
         const val imageSize = 30f
+        const val indentPad = 30f
 
         // todo: CivilopediaScreen itself does something similar
         val categoryToGetIcon = hashMapOf<CivilopediaCategories,(String)->Actor>(
             CivilopediaCategories.Unit to { name -> ImageGetter.getUnitIcon(name, defaultColor) },
-            CivilopediaCategories.Building to { name -> ImageGetter.getConstructionImage(name) },
-            CivilopediaCategories.Wonder to { name -> ImageGetter.getConstructionImage(name) },
+            CivilopediaCategories.Building to { name -> ImageGetter.getConstructionImage(name).surroundWithCircle(imageSize, color = defaultColor) },
+            CivilopediaCategories.Wonder to { name -> ImageGetter.getConstructionImage(name).surroundWithCircle(imageSize, color = defaultColor) },
             CivilopediaCategories.Improvement to { name -> ImageGetter.getImprovementIcon(name, imageSize) },
             CivilopediaCategories.Nation to { name -> ImageGetter.getNationIcon(name) },
             CivilopediaCategories.Policy to { name -> ImageGetter.getImage(FC.policyIconFolder + File.separator + name) },
@@ -180,36 +187,51 @@ open class CivilopediaText {
         )
     }
 
-    private enum class LinkType {None, Internal, External}
+    private enum class LinkType {None, Internal, External, Image}
 
     /** Helper class stores the parsing result of [parseFormatting] -
      * line text without [formatting symbols][FormattingConstants] and its discrete formatting info */
     private class CivilopediaFormatting (
             val linkType: LinkType = LinkType.None,
             val linkTo: String? = null,
+            val imageSize: Int = 40,
             val header: Int = 0,
             val color: Color = Color.WHITE,
             val italic: Boolean = false,        // Not implemented
             val bold: Boolean = false,          // Not implemented
             val strike: Boolean = false,        // Not implemented
             val starred: Boolean = false,
+            val centered: Boolean = false,
+            val indent: Int = 0,
             val line: String = ""
         ) {
 
         fun render(skin: Skin, labelWidth: Float): Actor {
+            if (linkType == LinkType.Image && linkTo != null) {
+                val table = Table(skin)
+                val image = when {
+                        ImageGetter.imageExists(linkTo) ->
+                            ImageGetter.getImage(linkTo)
+                        Gdx.files.internal("ExtraImages/$linkTo.png").exists() ->
+                            ImageGetter.getExternalImage("$linkTo.png")
+                        Gdx.files.internal("ExtraImages/$linkTo.jpg").exists() ->
+                            ImageGetter.getExternalImage("$linkTo.jpg")
+                        else -> return table
+                    }
+                table.add(image).size(imageSize.toFloat())
+                return table
+            }
             val fontSize = if (header>= FC.headerSizes.size) FC.defaultSize else FC.headerSizes[header]
             val labelColor = if(starred) FC.defaultColor else color
             val label = if (fontSize == FC.defaultSize && labelColor == FC.defaultColor) line.toLabel()
                 else line.toLabel(labelColor,fontSize)
-            label.wrap = true
-            if (linkType == LinkType.None && !starred)
-                return label
+            label.wrap = !centered
             val table = Table(skin)
-            var actualWidth = labelWidth
+            var usedWidth = 0f
             val imageSize = max(FC.imageSize, fontSize * 1.2f)
             if (linkType != LinkType.None) {
                 table.add( ImageGetter.getImage(FC.linkImage) ).size(imageSize)
-                actualWidth -= imageSize
+                usedWidth += imageSize
             }
             if (linkTo != null) {
                 val parts = linkTo.split('/', limit = 2)
@@ -221,7 +243,7 @@ open class CivilopediaText {
                             val image =
                                 getter(parts[1])    // no fail guard because image getters fall back to the white dot when an image is missing?
                             table.add(image).size(imageSize)
-                            actualWidth -= imageSize
+                            usedWidth += imageSize
                         }
                     }
                 }
@@ -230,9 +252,16 @@ open class CivilopediaText {
                 val image = ImageGetter.getImage(FC.starImage)
                 image.color = this.color
                 table.add(image).size(imageSize)
-                actualWidth -= imageSize
+                usedWidth += imageSize
             }
-            table.add(label).width(actualWidth).padLeft(10f)
+            val align = if (centered) Align.center else Align.left
+            label.setAlignment(align)
+            val padIndent = when {
+                centered -> -usedWidth
+                indent == 0 -> 10f
+                else -> (indent-1) * FC.indentPad + 3 * FC.imageSize - usedWidth
+            }
+            table.add(label).width(labelWidth - usedWidth - padIndent).padLeft(padIndent).align(align)
             return table
         }
     }
@@ -247,6 +276,9 @@ open class CivilopediaText {
         var bold = false
         var strike = false
         var starred = false
+        var centered = false
+        var imageSize = 40
+        var indent = 0
 
         var i = 0
         while (i < line.length) {
@@ -266,6 +298,15 @@ open class CivilopediaText {
                         i = endPos
                     }
                 }
+                FC.iconSizeSymbol -> {
+                    var endPos = i + 1
+                    while (endPos < line.length && line[endPos].isDigit()) endPos++
+                    if (endPos > i + 1) {
+                        linkType = LinkType.Image
+                        imageSize = line.substring(i + 1, endPos).toInt()
+                        i = endPos - 1
+                    }
+                }
                 FC.headerSymbol -> header++
                 FC.colorSymbol -> {
                     if (line.isHex(i+1,6)) {
@@ -283,7 +324,15 @@ open class CivilopediaText {
                 FC.boldSymbol -> bold = true
                 FC.strikeSymbol -> strike = true
                 FC.starredSymbol -> starred = true
-                FC.endFormattingSymbol -> { i++; break }
+                FC.centerSymbol -> centered = true
+                FC.endFormattingSymbol -> {
+                    i++
+                    while (i < line.length && line[i] == FC.endFormattingSymbol) {
+                        indent++
+                        i++
+                    }
+                    break
+                }
                 else -> break
             }
             i++
@@ -295,8 +344,8 @@ open class CivilopediaText {
             color = Color.SKY
             linkType = LinkType.External
         }
-
-        return CivilopediaFormatting(linkType, linkTo, header, color, italic, bold, strike, starred, text)
+        if (linkType == LinkType.Image && linkTo == null) linkType = LinkType.None
+        return CivilopediaFormatting(linkType, linkTo, imageSize, header, color, italic, bold, strike, starred, centered, indent, text)
     }
 }
 private typealias FC = CivilopediaText.FormattingConstants

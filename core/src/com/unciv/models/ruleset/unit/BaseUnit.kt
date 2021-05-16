@@ -91,7 +91,7 @@ class BaseUnit : INamed, IConstruction, CivilopediaText() {
     }
     override fun replacesCivilopediaDescription() = true
     override fun hasCivilopediaTextLines() = true
-    override fun getCivilopediaTextLines(): List<String> {
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
         val infoList = mutableListOf<String>()
 
         val stats = mutableListOf<String>()
@@ -109,12 +109,12 @@ class BaseUnit : INamed, IConstruction, CivilopediaText() {
             infoList += " " + Translations.translateBonusOrPenalty(unique)
 
         for ((resource, amount) in getResourceRequirements()) {
-            infoList += if (amount == 1) "[Resources/$resource]+EE3311 Consumes 1 [$resource]"
-                else "[Resources/$resource]+EE3311 Consumes [$amount] [$resource]"
+            infoList += if (amount == 1) "[Resources/$resource]+F42 Consumes 1 [$resource]"
+                else "[Resources/$resource]+F42 Consumes [$amount] [$resource]"
         }
         if (uniqueTo != null) {
             infoList += "[Nations/$uniqueTo] Unique to [$uniqueTo],"
-            infoList += "[Units/$replaces]     replaces [$replaces]"
+            infoList += "[Units/$replaces]  replaces [$replaces]"
         }
         if (requiredTech != null) infoList += "[Technologies/$requiredTech] Required tech: [$requiredTech]"
         if (upgradesTo != null) infoList += "[Units/$upgradesTo] Upgrades to [$upgradesTo]"
@@ -125,7 +125,7 @@ class BaseUnit : INamed, IConstruction, CivilopediaText() {
                 when {
                     promotions.size == 1 -> "{Free promotion:} {${it.value}}"
                     it.index==0 -> "{Free promotions:} {${it.value}}"
-                    else -> "    {${it.value}}"
+                    else -> "  {${it.value}}"
                 } + (if (promotions.size > 1 && it.index == promotions.size-1) "" else ",")
         }
 

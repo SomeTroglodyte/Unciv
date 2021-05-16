@@ -24,7 +24,7 @@ import com.unciv.models.stats.INamed
  * @param entry Item's [INamed.name] to select
  */
 class CivilopediaScreen(
-    ruleset: Ruleset
+    val ruleset: Ruleset
     , category: CivilopediaCategories = CivilopediaCategories.Tutorial
     , entry: String = ""
 ) : CameraStageBaseScreen() {
@@ -140,15 +140,19 @@ class CivilopediaScreen(
         selectEntry(entry)
     }
     private fun selectEntry(entry: CivilopediaEntry) {
-        descriptionLabel.setText(
-            if(entry.flavour != null && entry.flavour.replacesCivilopediaDescription()) ""
-                else entry.description
-        )
+        if(entry.flavour != null && entry.flavour.replacesCivilopediaDescription()) {
+            descriptionLabel.setText("")
+        } else {
+            descriptionLabel.setText(entry.description)
+        }
         flavourTable.clear()
         if (entry.flavour != null) {
+            flavourTable.isVisible = true
             flavourTable.add(
-                entry.flavour.assembleCivilopediaText()
+                entry.flavour.assembleCivilopediaText(ruleset)
                     .renderCivilopediaText(skin, stage.width * 0.5f) { selectLink(it) })
+        } else {
+            flavourTable.isVisible = false
         }
         entrySelectTable.children.forEach {
             it.color = if (it.name == entry.name) Color.BLUE else Color.WHITE
@@ -287,14 +291,13 @@ class CivilopediaScreen(
 
         stage.addActor(splitPane)
 
-        descriptionLabel.wrap = true            // requires explicit cell width!
-
         entrySelectScroll = ScrollPane(entrySelectTable)
         entrySelectTable.top()
         entrySelectScroll.setOverscroll(false, false)
         val descriptionTable = Table()
-        descriptionTable.add(descriptionLabel).width(stage.width * 0.5f).row()
-        descriptionTable.add(flavourTable)
+        descriptionTable.add(flavourTable).row()
+        descriptionLabel.wrap = true            // requires explicit cell width!
+        descriptionTable.add(descriptionLabel).width(stage.width * 0.5f).padTop(10f).row()
         val entrySplitPane = SplitPane(entrySelectScroll, ScrollPane(descriptionTable), false, skin)
         entrySplitPane.splitAmount = 0.3f
         entryTable.addActor(entrySplitPane)
