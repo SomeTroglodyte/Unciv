@@ -7,9 +7,10 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.Unique
 import com.unciv.models.translations.tr
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.ui.civilopedia.CivilopediaText
 import java.util.*
 
-class Technology {
+class Technology: CivilopediaText() {
 
     lateinit var name: String
 
@@ -120,4 +121,76 @@ class Technology {
     fun era(): String = column!!.era
 
     fun isContinuallyResearchable() = uniques.contains("Can be continually researched")
+
+    override fun getCivilopediaTextHeader(): String = "(Technology/$name)##$name"
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
+        val lineList = ArrayList<String>()
+
+        for (unique in uniques) lineList += " $unique"
+
+        var wantEmpty = uniques.isNotEmpty()
+        for (improvement in ruleset.tileImprovements.values)
+            for (unique in improvement.uniqueObjects) {
+                if (unique.placeholderText == "[] once [] is discovered" && unique.params.last() == name) {
+                    if (wantEmpty) { lineList += ""; wantEmpty = false }
+                    lineList += "[Improvement/${improvement.name}] [${unique.params[0]}] from every [${improvement.name}]"
+                } else if (unique.placeholderText == "[] on [] tiles once [] is discovered" && unique.params.last() == name) {
+                    if (wantEmpty) { lineList += ""; wantEmpty = false }
+                    lineList += "[Improvement/${improvement.name}] [${unique.params[0]}] from every [${improvement.name}] on [${unique.params[1]}] tiles"
+                }
+            }
+
+        val viewingCiv = UncivGame.Current.worldScreen.viewingCiv
+        val enabledUnits = getEnabledUnits(viewingCiv).filter { "Will not be displayed in Civilopedia" !in it.uniques }
+        if (enabledUnits.isNotEmpty()) {
+            lineList += ""
+            lineList += " {Units enabled}: "
+            for (unit in enabledUnits)
+                lineList += "[Unit/${unit.name}] " + unit.name.tr() + " (" + unit.getShortDescription() + ")"
+        }
+
+        val enabledBuildings = getEnabledBuildings(viewingCiv)
+            .filter { "Will not be displayed in Civilopedia" !in it.uniques }
+            .partition { it.isWonder || it.isNationalWonder }
+        if (enabledBuildings.first.isNotEmpty()) {
+            lineList += ""
+            lineList += " {Wonders enabled}: "
+            for (wonder in enabledBuildings.first)
+                lineList += "[Wonder/${wonder.name}] " + wonder.name.tr() + " (" + wonder.getShortDescription(ruleset) + ")"
+        }
+        if (enabledBuildings.second.isNotEmpty()) {
+            lineList += ""
+            lineList += " {Buildings enabled}: "
+            for (building in enabledBuildings.second)
+                lineList += "[Building/${building.name}] " + building.name.tr() + " (" + building.getShortDescription(ruleset) + ")"
+        }
+
+        wantEmpty = true
+        for (building in getObsoletedBuildings(viewingCiv)
+                .filter { "Will not be displayed in Civilopedia" !in it.uniques }) {
+            if (wantEmpty) { lineList += ""; wantEmpty = false }
+            lineList += "[Building/${building.name}] [${building.name}] obsoleted"
+        }
+
+        wantEmpty = true
+        for (resource in ruleset.tileResources.values.asSequence()
+                .filter { it.revealedBy == name }.map { it.name }) {
+            if (wantEmpty) { lineList += ""; wantEmpty = false }
+            lineList += "[Resource/$resource] Reveals [$resource] on the map"
+        }
+
+        val tileImprovements = ruleset.tileImprovements.values.filter { it.techRequired == name }
+        if (tileImprovements.isNotEmpty()) {
+            lineList += ""
+            lineList += " {Tile improvements enabled}:"
+            tileImprovements.forEach {
+                lineList += "[Improvement/$it] $it"
+            }
+        }
+
+        return lineList
+    }
 }

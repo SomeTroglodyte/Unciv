@@ -92,44 +92,68 @@ class BaseUnit : INamed, IConstruction, CivilopediaText() {
     override fun replacesCivilopediaDescription() = true
     override fun hasCivilopediaTextLines() = true
     override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
-        val infoList = mutableListOf<String>()
+        val textList = ArrayList<String>()
 
-        val stats = mutableListOf<String>()
+        val stats = ArrayList<String>()
         if (strength != 0) stats += "$strength${Fonts.strength}"
         if (rangedStrength != 0) {
             stats += "$rangedStrength${Fonts.rangedStrength}"
             stats += "$range${Fonts.range}"
         }
         if (movement != 0) stats += "$movement${Fonts.movement}"
-        stats += "{Cost}: $cost"
-        infoList += " " + stats.joinToString(", ")
+        if (cost != 0) stats += "{Cost}: $cost"
+        if (stats.isNotEmpty())
+            textList += " " + stats.joinToString(", ")
 
-        if (replacementTextForUniques != "") infoList += " " + replacementTextForUniques
-        else for (unique in uniques)
-            infoList += " " + Translations.translateBonusOrPenalty(unique)
+        if (replacementTextForUniques != "") {
+            textList += ""
+            textList += " $replacementTextForUniques"
+        } else if (uniques.isNotEmpty()) {
+            textList += ""
+            for (unique in uniques.sorted()) {
+                val uniqueObject = Unique(unique)
+                if (uniqueObject.placeholderText == "Can construct []") {
+                    val improvement = Unique(unique).params[0]
+                    textList += "[Improvement/$improvement] $unique"
+                } else {
+                    textList += " " + Translations.translateBonusOrPenalty(unique)
+                }
+            }
+        }
 
-        for ((resource, amount) in getResourceRequirements()) {
-            infoList += if (amount == 1) "[Resources/$resource]+F42 Consumes 1 [$resource]"
+        val resourceRequirements = getResourceRequirements()
+        if (resourceRequirements.isNotEmpty()) {
+            textList += ""
+            for ((resource, amount) in resourceRequirements) {
+                textList += if (amount == 1) "[Resources/$resource]+F42 Consumes 1 [$resource]"
                 else "[Resources/$resource]+F42 Consumes [$amount] [$resource]"
+            }
         }
+
         if (uniqueTo != null) {
-            infoList += "[Nations/$uniqueTo] Unique to [$uniqueTo],"
-            infoList += "[Units/$replaces]   replaces [$replaces]"
-        }
-        if (requiredTech != null) infoList += "[Technologies/$requiredTech] Required tech: [$requiredTech]"
-        if (upgradesTo != null) infoList += "[Units/$upgradesTo] Upgrades to [$upgradesTo]"
-        if (obsoleteTech != null) infoList += "[Technologies/$obsoleteTech] Obsolete with [$obsoleteTech]"
-
-        promotions.withIndex().forEach {
-            infoList += "[Promotions/${it.value}] " +
-                when {
-                    promotions.size == 1 -> "{Free promotion:} {${it.value}}"
-                    it.index==0 -> "{Free promotions:} {${it.value}}"
-                    else -> "  {${it.value}}"
-                } + (if (promotions.size > 1 && it.index == promotions.size-1) "" else ",")
+            textList += ""
+            textList += "[Nations/$uniqueTo] Unique to [$uniqueTo],"
+            textList += "[Units/$replaces]   replaces [$replaces]"
         }
 
-        return infoList
+        if (requiredTech != null || upgradesTo != null || obsoleteTech != null) textList += ""
+        if (requiredTech != null) textList += "[Technologies/$requiredTech] Required tech: [$requiredTech]"
+        if (upgradesTo != null) textList += "[Units/$upgradesTo] Upgrades to [$upgradesTo]"
+        if (obsoleteTech != null) textList += "[Technologies/$obsoleteTech] Obsolete with [$obsoleteTech]"
+
+        if (promotions.isNotEmpty()) {
+            textList += ""
+            promotions.withIndex().forEach {
+                textList += "[Promotions/${it.value}] " +
+                        when {
+                            promotions.size == 1 -> "{Free promotion:} {${it.value}}"
+                            it.index == 0 -> "{Free promotions:} {${it.value}}"
+                            else -> "  {${it.value}}"
+                        } + (if (promotions.size > 1 && it.index == promotions.size - 1) "" else ",")
+            }
+        }
+
+        return textList
     }
 
     fun getMapUnit(ruleset: Ruleset): MapUnit {

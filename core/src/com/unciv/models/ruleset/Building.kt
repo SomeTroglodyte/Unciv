@@ -224,45 +224,68 @@ class Building : NamedStats(), IConstruction, ICivilopediaText {
     override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
         val textList = ArrayList<String>()
 
+        if (isWonder || isNationalWonder) {
+            textList += "+CA4### " + (if (isWonder) "Wonder of the World" else "National Wonder")
+        }
+
         if (uniqueTo != null) {
+            textList += ""
             textList += "[Nations/$uniqueTo] Unique to [$uniqueTo],"
             val replacesBuilding = ruleset.buildings[uniqueTo]
             val isWonder = replacesBuilding != null && (replacesBuilding.isWonder || replacesBuilding.isNationalWonder)
-            textList += "[${if (isWonder) "Wonder" else "Building"}/$replaces]   replaces [$replaces]"
+            textList += "[${if (isWonder) "Wonder" else "Building"}/$replaces]  replaces [$replaces]"
         }
+
+        textList += ""
         textList += "{Cost}: $cost"
-        if (isWonder) textList += "Wonder"
-        if (isNationalWonder) textList += "National Wonder"
+
+        if (requiredTech != null || requiredBuilding != null || requiredBuildingInAllCities != null)
+            textList += ""
         if (requiredTech != null)
             textList += "[Technologies/$requiredTech] Required tech: [$requiredTech]"
         if (requiredBuilding != null)
             textList += "[Building/$requiredBuilding] Requires [$requiredBuilding] to be built in the city"
         if (requiredBuildingInAllCities != null)
             textList += "[Building/$requiredBuildingInAllCities] Requires [$requiredBuildingInAllCities] to be built in all cities"
-        for ((resource, amount) in getResourceRequirements()) {
-            textList += if (amount == 1) "[Resources/$resource]+F42 Consumes 1 [$resource]"
-                        else "[Resources/$resource]+F42 Consumes [$amount] [$resource]"
+
+        val resourceRequirements = getResourceRequirements()
+        if (resourceRequirements.isNotEmpty()) {
+            textList += ""
+            for ((resource, amount) in resourceRequirements) {
+                textList += if (amount == 1) "[Resources/$resource]+F42 Consumes 1 [$resource]"
+                else "[Resources/$resource]+F42 Consumes [$amount] [$resource]"
+            }
         }
-        if (providesFreeBuilding != null)
+        if (providesFreeBuilding != null) {
+            textList += ""
             textList += "[Building/$providesFreeBuilding] Provides a free [$providesFreeBuilding] in the city"
+        }
         if (uniques.isNotEmpty()) {
+            textList += ""
             if (replacementTextForUniques != "")
                 textList += replacementTextForUniques
             else
                 for (unique in getUniquesStrings()) textList += " $unique"
         }
+
         val stats = this.clone()
-        if (!stats.isEmpty())
+        if (!stats.isEmpty()) {
+            textList += ""
             textList += " $stats"
+        }
 
         val percentStats = getStatPercentageBonuses(null)
-        if (percentStats.production != 0f) textList += " +" + percentStats.production.toInt() + "% {Production}"
-        if (percentStats.gold != 0f) textList += " +" + percentStats.gold.toInt() + "% {Gold}"
-        if (percentStats.science != 0f) textList += " +" + percentStats.science.toInt() + "% {Science}"
-        if (percentStats.food != 0f) textList += " +" + percentStats.food.toInt() + "% {Food}"
-        if (percentStats.culture != 0f) textList += " +" + percentStats.culture.toInt() + "% {Culture}"
+        if (!percentStats.isEmpty()) {
+            textList += ""
+            if (percentStats.production != 0f) textList += " +" + percentStats.production.toInt() + "% {Production}"
+            if (percentStats.gold != 0f) textList += " +" + percentStats.gold.toInt() + "% {Gold}"
+            if (percentStats.science != 0f) textList += " +" + percentStats.science.toInt() + "% {Science}"
+            if (percentStats.food != 0f) textList += " +" + percentStats.food.toInt() + "% {Food}"
+            if (percentStats.culture != 0f) textList += " +" + percentStats.culture.toInt() + "% {Culture}"
+        }
 
         if (this.greatPersonPoints != null) {
+            textList += ""
             val gpp = this.greatPersonPoints!!
             if (gpp.production != 0f) textList += "[Unit/Great Engineer] +" + gpp.production.toInt() + " " + "[Great Engineer] points".tr()
             if (gpp.gold != 0f) textList += "[Unit/Great Merchant]  +" + gpp.gold.toInt() + " " + "[Great Merchant] points".tr()
@@ -270,15 +293,21 @@ class Building : NamedStats(), IConstruction, ICivilopediaText {
             if (gpp.culture != 0f) textList += "[Unit/Great Artist]  +" + gpp.culture.toInt() + " " + "[Great Artist] points".tr()
         }
 
-        for ((specialistName, amount) in newSpecialists())
-            textList += " +$amount " + "[$specialistName] slots".tr()
+        val specialists = newSpecialists()
+        if (specialists.isNotEmpty()) {
+            textList += ""
+            for ((specialistName, amount) in specialists)
+                textList += " +$amount " + "[$specialistName] slots".tr()
+        }
 
         if (resourceBonusStats != null) {
+            textList += ""
             val resources = ruleset.tileResources.values.filter { name == it.building }.joinToString { it.name.tr() }
             textList += " $resources {provide} $resourceBonusStats"
         }
 
         if (requiredNearbyImprovedResources != null) {
+            textList += ""
             requiredNearbyImprovedResources!!.withIndex().forEach {
                 textList += "[Resource/${it.value}] " +
                         (if (it.index == 0) "Requires worked" else "  or") +
@@ -287,6 +316,7 @@ class Building : NamedStats(), IConstruction, ICivilopediaText {
             }
         }
 
+        if (cityStrength != 0 || cityHealth != 0 || xpForNewUnits != 0 || maintenance != 0) textList += ""
         if (cityStrength != 0) textList += " {City strength} +$cityStrength"
         if (cityHealth != 0) textList += " {City health} +$cityHealth"
         if (xpForNewUnits != 0) textList += " +$xpForNewUnits {XP for new units}"
@@ -300,6 +330,7 @@ class Building : NamedStats(), IConstruction, ICivilopediaText {
             }
         }
         if (seeAlso.isNotEmpty()) {
+            textList += ""
             textList += "{See also}:"
             textList += seeAlso
         }

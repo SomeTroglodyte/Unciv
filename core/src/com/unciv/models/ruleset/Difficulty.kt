@@ -3,8 +3,9 @@ package com.unciv.models.ruleset
 import com.unciv.Constants
 import com.unciv.models.stats.INamed
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.CivilopediaText
 
-class Difficulty: INamed {
+class Difficulty: INamed, CivilopediaText() {
     override lateinit var name: String
     var baseHappiness: Int = 0
     var extraHappinessPerLuxury: Float = 0f
@@ -39,35 +40,43 @@ class Difficulty: INamed {
         }
     }
 
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
+        return getLines()
+    }
     fun getDescription(): String {
+        return getLines().joinToString("\n") { it.tr() }
+    }
+
+    private fun getLines(): List<String> {
         val lines = ArrayList<String>()
         lines += "Player settings"
-        lines += " - {Base Happiness}: $baseHappiness"
-        lines += " - {Happiness per luxury}: $extraHappinessPerLuxury"
-        lines += " - {Research cost modifier}: $researchCostModifier"
-        lines += " - {Unit cost modifier}: $researchCostModifier"
-        lines += " - {Building cost modifier}: $buildingCostModifier"
-        lines += " - {Policy cost modifier}: $policyCostModifier"
-        lines += " - {Unhappiness modifier}: $unhappinessModifier"
-        lines += " - {Bonus vs. Barbarians}: $barbarianBonus"
-//        lines += " - {Starting units}: $startingUnits"
+        lines += "  - {Base Happiness}: $baseHappiness"
+        lines += "  - {Extra} {Happiness per luxury}: $extraHappinessPerLuxury"
+        lines += "  - {Research cost modifier}: $researchCostModifier"
+        lines += "  - {Unit cost modifier}: $researchCostModifier"
+        lines += "  - {Building cost modifier}: $buildingCostModifier"
+        lines += "  - {Policy cost modifier}: $policyCostModifier"
+        lines += "  - {Unhappiness modifier}: $unhappinessModifier"
+        lines += "  - {Bonus vs. Barbarians}: $barbarianBonus"
+//        lines += "  - {Starting units}: $startingUnits"
         lines += ""
         lines += "AI settings"
-        lines += " - {AI city growth modifier}: $aiCityGrowthModifier"
-        lines += " - {AI unit cost modifier}: $aiUnitCostModifier"
-        lines += " - {AI building cost modifier}: $aiBuildingCostModifier"
-        lines += " - {AI wonder cost modifier}: $aiWonderCostModifier"
-        lines += " - {AI building maintenance modifier}: $aiBuildingMaintenanceModifier"
-        lines += " - {AI unit maintenance modifier}: $aiUnitMaintenanceModifier"
-//        lines += " - {AI free techs}: $aiFreeTechs"
-//        lines += " - {AI major civilizations starting units}: $aiMajorCivStartingUnits"
-//        lines += " - {AI city-state starting units}: $aiCityStateStartingUnits"
-        lines += " - {AI unhappiness modifier}: $aiUnhappinessModifier"
+        lines += "  - {AI city growth modifier}: $aiCityGrowthModifier"
+        lines += "  - {AI unit cost modifier}: $aiUnitCostModifier"
+        lines += "  - {AI building cost modifier}: $aiBuildingCostModifier"
+        lines += "  - {AI wonder cost modifier}: $aiWonderCostModifier"
+        lines += "  - {AI building maintenance modifier}: $aiBuildingMaintenanceModifier"
+        lines += "  - {AI unit maintenance modifier}: $aiUnitMaintenanceModifier"
+//        lines += "  - {AI free techs}: $aiFreeTechs"
+//        lines += "  - {AI major civilizations starting units}: $aiMajorCivStartingUnits"
+//        lines += "  - {AI city-state starting units}: $aiCityStateStartingUnits"
+        lines += "  - {AI unhappiness modifier}: $aiUnhappinessModifier"
         lines += ""
         lines += "{Turns until barbarians enter player tiles}: $turnBarbariansCanEnterPlayerTiles"
         lines += "{Gold reward for clearing barbarian camps}: $clearBarbarianCampReward"
-
-        return lines.joinToString("\n") { it.tr() }
+        return lines
     }
-
 }

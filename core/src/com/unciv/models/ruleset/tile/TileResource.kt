@@ -4,14 +4,17 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.stats.NamedStats
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.ICivilopediaText
 import java.util.*
 
-class TileResource : NamedStats() {
+class TileResource : NamedStats(), ICivilopediaText {
 
     var resourceType: ResourceType = ResourceType.Bonus
     var terrainsCanBeFoundOn: List<String> = listOf()
     var improvement: String? = null
     var improvementStats: Stats? = null
+
+    override var civilopediaText = listOf<String>()
 
     /**
      * The building that improves this resource, if any. E.G.: Granary for wheat, Stable for cattle.
@@ -47,7 +50,68 @@ class TileResource : NamedStats() {
         if (unique != null) stringBuilder.appendLine(unique!!.tr())
         return stringBuilder.toString()
     }
+
+    override fun getCivilopediaTextHeader(): String =
+        "(Resource/$name)" + super.getCivilopediaTextHeader()
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
+        val textList = ArrayList<String>()
+
+        textList += when (resourceType) {
+            ResourceType.Bonus -> "+81c784####"
+            ResourceType.Luxury -> "+ffeb7f####"
+            ResourceType.Strategic -> "+c5a189####"
+        } + "{${resourceType.name}} {resource}"
+
+        textList += " " + this.clone().toString()
+
+        if (terrainsCanBeFoundOn.isNotEmpty()) {
+            textList += ""
+            if (terrainsCanBeFoundOn.size == 1) {
+                with (terrainsCanBeFoundOn[0]) {
+                    textList += "[Terrain/$this] {Can be found on} {$this}"
+                }
+            } else {
+                textList += " {Can be found on}:"
+                terrainsCanBeFoundOn.forEach {
+                    textList += "[Terrain/$it]  $it"
+                }
+            }
+        }
+
+        textList += ""
+        textList += "[Improvement/$improvement] Improved by [$improvement]"
+        if (improvementStats != null && !improvementStats!!.isEmpty())
+            textList += " {Bonus stats for improvement}: " + improvementStats.toString()
+
+        val buildingsThatConsumeThis = ruleset.buildings.values.filter { it.getResourceRequirements().containsKey(name) }
+        if (buildingsThatConsumeThis.isNotEmpty()) {
+            textList += ""
+            textList += " {Buildings that consume this resource}:"
+            buildingsThatConsumeThis.forEach {
+                textList += "[Building/${it.name}]  ${it.name}"
+            }
+        }
+
+        val unitsThatConsumeThis = ruleset.units.values.filter { it.getResourceRequirements().containsKey(name) }
+        if (unitsThatConsumeThis.isNotEmpty()) {
+            textList += ""
+            textList += "{Units that consume this resource}: "
+            unitsThatConsumeThis.forEach {
+                textList += "[Unit/${it.name}]  ${it.name}"
+            }
+        }
+
+        if (unique != null) {
+            textList += ""
+            textList += " $unique"
+        }
+        return textList
+    }
 }
+
 
 data class ResourceSupply(val resource:TileResource,var amount:Int, val origin:String)
 

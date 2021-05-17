@@ -6,9 +6,10 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.Unique
 import com.unciv.models.stats.NamedStats
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.ICivilopediaText
 import com.unciv.ui.utils.colorFromRGB
 
-class Terrain : NamedStats() {
+class Terrain : NamedStats(), ICivilopediaText {
 
     lateinit var type: TerrainType
 
@@ -38,6 +39,8 @@ class Terrain : NamedStats() {
     
     @Deprecated("As of 3.14.1")
     var rough = false
+
+    override var civilopediaText = listOf<String>()
 
 
     fun getColor(): Color { // Can't be a lazy initialize, because we play around with the resulting color with lerp()s and the like
@@ -74,5 +77,78 @@ class Terrain : NamedStats() {
             sb.appendLine("Rough Terrain".tr())
 
         return sb.toString()
+    }
+
+    override fun getCivilopediaTextHeader(): String =
+        "(Terrain/$name)" + super.getCivilopediaTextHeader()
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
+        val textList = ArrayList<String>()
+
+        if (turnsInto != null) {
+            textList += "+3A0### Natural Wonder"
+        }
+
+        val stats = this.clone()
+        if (!stats.isEmpty()) {
+            textList += ""
+            textList += " $stats"
+        }
+
+        if (occursOn.isNotEmpty()) {
+            textList += ""
+            if (occursOn.size == 1) {
+                with (occursOn[0]) {
+                    textList += "[Terrain/$this] {Occurs on} {$this}"
+                }
+            } else {
+                textList += " {Occurs on}:"
+                occursOn.forEach {
+                    textList += "[Terrain/$it]  $it"
+                }
+            }
+        }
+
+        if (turnsInto != null) {
+            textList += "[Terrain/$turnsInto] Placed on [$turnsInto]"
+        }
+
+        val resourcesFound = ruleset.tileResources.values.filter { it.terrainsCanBeFoundOn.contains(name) }
+        if (resourcesFound.isNotEmpty()) {
+            textList += ""
+            if (resourcesFound.size == 1) {
+                with (resourcesFound[0]) {
+                    textList += "[Resource/$this] {May contain} {$this}"
+                }
+            } else {
+                textList += "{May contain}:"
+                resourcesFound.forEach {
+                    textList += "[Resource/$it]  $it"
+                }
+            }
+        }
+
+        if (uniques.isNotEmpty()) {
+            textList += ""
+            uniques.sorted().forEach {
+                textList += " $it"
+            }
+        }
+
+        textList += ""
+        if (impassable)
+            textList += " " + Constants.impassable
+        else
+            textList += " {Movement cost}: $movementCost"
+
+        if (defenceBonus != 0f)
+            textList += " {Defence bonus}: ${(defenceBonus * 100).toInt()}%"
+
+        if (rough)
+            textList += " {Rough Terrain}"
+
+        return textList
     }
 }

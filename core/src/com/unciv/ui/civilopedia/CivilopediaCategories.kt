@@ -32,7 +32,7 @@ object CivilopediaImageGetters {
                 tileInfo.baseTerrain = terrain.name
         }
         tileInfo.setTerrainTransients()
-        val group = TileGroup(tileInfo, TileSetStrings(), imageSize * 40f/54f)  // TileGroup normally spills out of its bounding box
+        val group = TileGroup(tileInfo, TileSetStrings(), imageSize * 36f/54f)  // TileGroup normally spills out of its bounding box
         group.showEntireMap = true
         group.forMapEditorIcon = true
         group.update()
@@ -41,7 +41,7 @@ object CivilopediaImageGetters {
 
     val construction = { name: String, size: Float ->
         ImageGetter.getConstructionImage(name)
-            .surroundWithCircle(size, color = ICivilopediaText.FormattingConstants.defaultColor)
+            .surroundWithCircle(size, color = MarkupRenderer.FormattingConstants.defaultColor)
     }
     val improvement = { name: String, size: Float ->
         ImageGetter.getImprovementIcon(name, size)
@@ -60,7 +60,7 @@ object CivilopediaImageGetters {
     }
     val technology = { name: String, size: Float ->
         ImageGetter.getTechIcon(name).apply{
-            color = ICivilopediaText.FormattingConstants.defaultColor
+            color = MarkupRenderer.FormattingConstants.defaultColor
             setSize(size,size)
         }
     }
