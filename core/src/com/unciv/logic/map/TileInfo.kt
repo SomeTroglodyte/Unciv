@@ -525,6 +525,49 @@ open class TileInfo {
         return lineList.joinToString("\n")
     }
 
+    fun toMarkup(viewingCiv: CivilizationInfo?): ArrayList<String> {
+        val lineList = ArrayList<String>() // more readable than StringBuilder, with same performance for our use-case
+        val isViewableToPlayer = viewingCiv == null || UncivGame.Current.viewEntireMapForDebug
+                || viewingCiv.viewableTiles.contains(this)
+
+        if (isCityCenter()) {
+            val city = getCity()!!
+            var cityString = "####+" + city.civInfo.nation.getInnerColor().toString().substring(0,6) + " " + city.name.tr()
+            if (isViewableToPlayer) cityString += " (" + city.health + ")"
+            lineList +=  cityString
+            if (UncivGame.Current.viewEntireMapForDebug || city.civInfo == viewingCiv)
+                lineList += city.cityConstructions.getProductionMarkup(ruleset)
+        }
+        lineList += "[Terrain/$baseTerrain] $baseTerrain"
+        for (terrainFeature in terrainFeatures) lineList += "[Terrain/$terrainFeature] $terrainFeature"
+        if (resource != null && (viewingCiv == null || hasViewableResource(viewingCiv))) lineList += "[Resource/$resource] $resource"
+        if (naturalWonder != null) lineList += "[Terrain/$naturalWonder] $naturalWonder"
+        if (roadStatus !== RoadStatus.None && !isCityCenter()) lineList += "[Improvement/${roadStatus.name}] ${roadStatus.name}"
+        if (improvement != null) lineList += "[Improvement/$improvement] $improvement"
+        if (improvementInProgress != null && isViewableToPlayer) {
+            var line = "{$improvementInProgress}"
+            if (turnsToImprovement > 0) line += " - $turnsToImprovement${Fonts.turn}"
+            else line += " ({Under construction})"
+            lineList += "[Improvement/$improvementInProgress] $line"
+        }
+        if (civilianUnit != null && isViewableToPlayer)
+            lineList += "[Unit/${civilianUnit!!.name}] " + civilianUnit!!.name.tr() + " - " + civilianUnit!!.civInfo.civName.tr()
+        if (militaryUnit != null && isViewableToPlayer) {
+            var milUnitString = militaryUnit!!.name.tr()
+            if (militaryUnit!!.health < 100) milUnitString += "(" + militaryUnit!!.health + ")"
+            milUnitString += " - " + militaryUnit!!.civInfo.civName.tr()
+            lineList += "[Unit/${militaryUnit!!.name}] " + milUnitString
+        }
+        val defenceBonus = getDefensiveBonus()
+        if (defenceBonus != 0f) {
+            var defencePercentString = (defenceBonus * 100).toInt().toString() + "%"
+            if (!defencePercentString.startsWith("-")) defencePercentString = "+$defencePercentString"
+            lineList += " [$defencePercentString] to unit defence"
+        }
+        if (isImpassible()) lineList += Constants.impassable
+
+        return lineList
+    }
 
     fun hasEnemyInvisibleUnit(viewingCiv: CivilizationInfo): Boolean {
         val unitsInTile = getUnits()

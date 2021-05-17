@@ -26,7 +26,7 @@ import com.unciv.models.stats.INamed
 class CivilopediaScreen(
     val ruleset: Ruleset
     , category: CivilopediaCategories = CivilopediaCategories.Tutorial
-    , entry: String = ""
+    , link: String = ""
 ) : CameraStageBaseScreen() {
 
     /** Container collecting data per Civilopedia entry
@@ -57,6 +57,8 @@ class CivilopediaScreen(
     private val descriptionLabel = "".toLabel()
     private val flavourTable = Table()
 
+    private var currentCategory: CivilopediaCategories = CivilopediaCategories.Tutorial
+    private var currentEntry: String = ""
 
     /** Jump to a "link" selecting both category and entry
      *
@@ -87,6 +89,7 @@ class CivilopediaScreen(
      * @param category Category key
      */
     fun selectCategory(category: CivilopediaCategories) {
+        currentCategory = category
         entrySelectTable.clear()
         entryIndex.clear()
         descriptionLabel.setText("")
@@ -130,6 +133,7 @@ class CivilopediaScreen(
      * @param noScrollAnimation Disable scroll animation
      */
     fun selectEntry(name: String, noScrollAnimation: Boolean = false) {
+        currentEntry = name
         val entry = entryIndex[name] ?: return
         // fails: entrySelectScroll.scrollTo(0f, entry.y, 0f, entry.h, false, true)
         entrySelectScroll.let {
@@ -305,13 +309,18 @@ class CivilopediaScreen(
         entryTable.addActor(entrySplitPane)
         entrySplitPane.setFillParent(true)
 
-        selectCategory(category)
-        selectEntry(entry)
+        if (link.isEmpty() || '/' !in link)
+            selectCategory(category)
+        if (link.isNotEmpty())
+            if ('/' in link)
+                selectLink(link)
+            else
+                selectEntry(link)
     }
 
     override fun resize(width: Int, height: Int) {
         if (stage.viewport.screenWidth != width || stage.viewport.screenHeight != height) {
-            game.setScreen(CivilopediaScreen(game.worldScreen.gameInfo.ruleSet))
+            game.setScreen(CivilopediaScreen(game.worldScreen.gameInfo.ruleSet, currentCategory, currentEntry))
         }
     }
 }

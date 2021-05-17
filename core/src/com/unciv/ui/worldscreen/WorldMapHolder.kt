@@ -471,8 +471,8 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
     }
 
     var blinkAction: Action? = null
-    fun setCenterPosition(vector: Vector2, immediately: Boolean = false, selectUnit: Boolean = true) {
-        val tileGroup = allWorldTileGroups.firstOrNull { it.tileInfo.position == vector } ?: return
+    fun setCenterPosition(vector: Vector2, immediately: Boolean = false, selectUnit: Boolean = true): Boolean {
+        val tileGroup = allWorldTileGroups.firstOrNull { it.tileInfo.position == vector } ?: return false
         selectedTile = tileGroup.tileInfo
         if (selectUnit)
             worldScreen.bottomUnitTable.tileSelected(selectedTile!!)
@@ -486,6 +486,9 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
 
         // Here it's the same, only the Y axis is inverted - when at 0 we're at the top, not bottom - so we invert it back.
         val finalScrollY = maxY - (tileGroup.y + tileGroup.width / 2 - height / 2)
+
+        if (scrollX == finalScrollX && scrollY == finalScrollY)
+            return false
 
         if (immediately) {
             scrollX = finalScrollX
@@ -513,6 +516,7 @@ class WorldMapHolder(internal val worldScreen: WorldScreen, internal val tileMap
         addAction(blinkAction) // Don't set it on the group because it's an actionlss group
 
         worldScreen.shouldUpdate = true
+        return true
     }
 
     override fun zoom(zoomScale: Float) {

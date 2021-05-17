@@ -20,7 +20,14 @@ private enum class LinkType {None, Internal, External, Image}
 /** Makes [renderer][render] available outside [ICivilopediaText] */
 object MarkupRenderer {
     /** Build a Gdx [Table] showing [formatted][FormattingConstants] [content][lines]. */
-    fun render (lines: Collection<String>, skin: Skin, labelWidth: Float, emptyLineHeight: Float = 10f, linkAction: ((id: String)->Unit)? = null): Table {
+    fun render (
+        lines: Collection<String>,
+        skin: Skin,
+        labelWidth: Float = 0f,
+        emptyLineHeight: Float = 10f,
+        noLinkImages: Boolean = false,
+        linkAction: ((id: String)->Unit)? = null
+    ): Table {
         val table = Table(skin).apply { defaults().pad(2.5f).align(Align.left) }
         for (line in lines) {
             if (line.isEmpty()) {
@@ -32,7 +39,7 @@ object MarkupRenderer {
                 continue
             }
             val formatting = parseFormatting(line)
-            val actor = formatting.render(skin, labelWidth)
+            val actor = formatting.render(skin, labelWidth, noLinkImages)
             if (formatting.linkType == LinkType.Internal && formatting.linkTo!=null && linkAction != null)
                 actor.onClick {
                     linkAction(formatting.linkTo)
@@ -42,7 +49,10 @@ object MarkupRenderer {
                     Gdx.net.openURI(line)
                 }
             val align = if (formatting.centered) Align.center else Align.left
-            table.add(actor).width(labelWidth).align(align).row()
+            if (labelWidth == 0f)
+                table.add(actor).align(align).row()
+            else
+                table.add(actor).width(labelWidth).align(align).row()
         }
         return table.apply { pack() }
     }
@@ -106,7 +116,7 @@ object MarkupRenderer {
         val indent: Int = 0,
         val line: String = ""
     ) {
-        fun render(skin: Skin, labelWidth: Float): Actor {
+        fun render(skin: Skin, labelWidth: Float, noLinkImages: Boolean = false): Actor {
             if (linkType == LinkType.Image && linkTo != null) {
                 val table = Table(skin)
                 val image = when {
@@ -125,15 +135,15 @@ object MarkupRenderer {
             val labelColor = if(starred) FC.defaultColor else color
             val label = if (fontSize == FC.defaultSize && labelColor == FC.defaultColor) line.toLabel()
             else line.toLabel(labelColor,fontSize)
-            label.wrap = !centered
+            label.wrap = !centered && labelWidth > 0f
             val table = Table(skin)
             var iconCount = 0
             val imageSize = max(FC.imageSize, fontSize * 1.5f)
-            if (linkType != LinkType.None) {
+            if (linkType != LinkType.None && !noLinkImages) {
                 table.add( ImageGetter.getImage(FC.linkImage) ).size(imageSize).padRight(5f)
                 iconCount++
             }
-            if (linkTo != null) {
+            if (linkTo != null && !noLinkImages) {
                 val parts = linkTo.split('/', limit = 2)
                 if (parts.size == 2) {
                     val category = CivilopediaCategories.fromLink(parts[0])
@@ -163,7 +173,10 @@ object MarkupRenderer {
                 indent == 0 -> 5f
                 else -> (indent-1) * FC.indentPad + 3 * FC.imageSize - usedWidth + 20f
             }
-            table.add(label).width(labelWidth - usedWidth - padIndent).padLeft(padIndent).align(align)
+            if (labelWidth == 0f)
+                table.add(label).padLeft(padIndent).align(align)
+            else
+                table.add(label).width(labelWidth - usedWidth - padIndent).padLeft(padIndent).align(align)
             return table
         }
     }

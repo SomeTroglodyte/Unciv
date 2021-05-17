@@ -5,10 +5,12 @@ import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.PopupAlert
 import com.unciv.models.ruleset.Building
+import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.UniqueMap
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.CivilopediaCategories
 import com.unciv.ui.utils.Fonts
 import com.unciv.ui.utils.withItem
 import com.unciv.ui.utils.withoutItem
@@ -135,6 +137,28 @@ class CityConstructions {
         var result = currentConstructionSnapshot.tr()
         if (currentConstructionSnapshot != ""
                 && !PerpetualConstruction.perpetualConstructionsMap.containsKey(currentConstructionSnapshot)) {
+            val turnsLeft = turnsToConstruction(currentConstructionSnapshot)
+            result += " - $turnsLeft${Fonts.turn}"
+        }
+        return result
+    }
+
+    fun getProductionMarkup(ruleset: Ruleset): String {
+        val currentConstructionSnapshot = currentConstructionFromQueue
+        if (currentConstructionSnapshot.isEmpty()) return ""
+        val category = when {
+            ruleset.buildings[currentConstructionSnapshot]
+                ?.let{ it.isWonder || it.isNationalWonder } == true ->
+                CivilopediaCategories.Wonder.name
+            currentConstructionSnapshot in ruleset.buildings ->
+                CivilopediaCategories.Building.name
+            currentConstructionSnapshot in ruleset.units ->
+                CivilopediaCategories.Unit.name
+            else -> ""
+        }
+        var result = if (category.isEmpty()) " {$currentConstructionSnapshot}"
+            else "[$category/$currentConstructionSnapshot] {$currentConstructionSnapshot}"
+        if (!PerpetualConstruction.perpetualConstructionsMap.containsKey(currentConstructionSnapshot)) {
             val turnsLeft = turnsToConstruction(currentConstructionSnapshot)
             result += " - $turnsLeft${Fonts.turn}"
         }

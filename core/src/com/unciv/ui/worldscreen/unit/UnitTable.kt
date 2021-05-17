@@ -13,9 +13,12 @@ import com.unciv.logic.city.CityInfo
 import com.unciv.logic.map.MapUnit
 import com.unciv.logic.map.TileInfo
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.CivilopediaCategories
+import com.unciv.ui.civilopedia.CivilopediaScreen
 import com.unciv.ui.pickerscreens.PromotionPickerScreen
 import com.unciv.ui.utils.*
 import com.unciv.ui.worldscreen.WorldScreen
+import sun.util.resources.cldr.hy.CalendarData_hy_AM
 
 class UnitTable(val worldScreen: WorldScreen) : Table(){
     private val prevIdleUnitButton = IdleUnitButton(this,worldScreen.mapHolder,true)
@@ -78,7 +81,9 @@ class UnitTable(val worldScreen: WorldScreen) : Table(){
             touchable = Touchable.enabled
             onClick {
                 selectedUnit?.currentTile?.position?.let {
-                    worldScreen.mapHolder.setCenterPosition(it, false, false)
+                    if ( !worldScreen.mapHolder.setCenterPosition(it, false, false) && selectedUnit != null ) {
+                        worldScreen.game.setScreen(CivilopediaScreen(worldScreen.gameInfo.ruleSet, CivilopediaCategories.Unit, selectedUnit!!.name))
+                    }
                 }
             }
         }).expand()
