@@ -3,6 +3,7 @@
 import com.badlogic.gdx.graphics.Color
 import com.unciv.Constants
 import com.unciv.logic.civilization.CityStateType
+import com.unciv.logic.civilization.CivilizationInfo
 import com.unciv.models.stats.INamed
 import com.unciv.models.translations.Translations
 import com.unciv.models.translations.squareBraceRegex
@@ -221,15 +222,13 @@ class Nation : INamed, CivilopediaText() {
         }
     }
 
-    override fun getCivilopediaTextHeader(): String {
-        return "(Nation/$name)" + super.getCivilopediaTextHeader()
-    }
-
+    override fun getCivilopediaTextHeader(): String =
+        "(Nation/$name)" + super.getCivilopediaTextHeader()
     override fun replacesCivilopediaDescription() = true
     override fun hasCivilopediaTextLines() = true
+
     override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
         val textList = ArrayList<String>()
-
 
         if (leaderName.isNotEmpty()) {
             textList += "^ " + getLeaderDisplayName()

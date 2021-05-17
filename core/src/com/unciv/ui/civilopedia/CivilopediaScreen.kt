@@ -41,7 +41,7 @@ class CivilopediaScreen(
         val name: String,
         val description: String,
         val image: Actor? = null,
-        val flavour: CivilopediaText? = null,
+        val flavour: ICivilopediaText? = null,
         val y: Float = 0f,              // coordinates of button cell used to scroll to entry
         val height: Float = 0f
     ) {
@@ -142,8 +142,10 @@ class CivilopediaScreen(
     private fun selectEntry(entry: CivilopediaEntry) {
         if(entry.flavour != null && entry.flavour.replacesCivilopediaDescription()) {
             descriptionLabel.setText("")
+            descriptionLabel.isVisible = false
         } else {
             descriptionLabel.setText(entry.description)
+            descriptionLabel.isVisible = true
         }
         flavourTable.clear()
         if (entry.flavour != null) {
@@ -170,7 +172,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getDescription(false, null, ruleset),
                         ImageGetter.getConstructionImage(it.name).surroundWithCircle(imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Wonder] = ruleset.buildings.values
@@ -180,7 +182,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getDescription(false, null, ruleset),
                         ImageGetter.getConstructionImage(it.name).surroundWithCircle(imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Resource] = ruleset.tileResources.values
@@ -189,7 +191,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getDescription(ruleset),
                         ImageGetter.getResourceImage(it.name, imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Terrain] = ruleset.terrains.values
@@ -197,8 +199,8 @@ class CivilopediaScreen(
                     CivilopediaEntry(
                         it.name,
                         it.getDescription(ruleset),
-                        terrainImage(it, ruleset, imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        CivilopediaImageGetters.terrainImage(it, ruleset, imageSize),
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Improvement] = ruleset.tileImprovements.values
@@ -207,7 +209,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getDescription(ruleset, false),
                         ImageGetter.getImprovementIcon(it.name, imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Unit] = ruleset.units.values
@@ -217,7 +219,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getDescription(false),
                         ImageGetter.getConstructionImage(it.name).surroundWithCircle(imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Nation] = ruleset.nations.values
@@ -227,7 +229,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getUniqueString(ruleset, false),
                         ImageGetter.getNationIndicator(it, imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Technology] = ruleset.technologies.values
@@ -236,7 +238,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getDescription(ruleset),
                         ImageGetter.getTechIconGroup(it.name, imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
         categoryToEntries[CivilopediaCategories.Promotion] = ruleset.unitPromotions.values
@@ -245,7 +247,7 @@ class CivilopediaScreen(
                         it.name,
                         it.getDescription(ruleset.unitPromotions.values, true, ruleset),
                         ImageGetter.getPromotionIcon(it.name, imageSize),
-                        (it as? CivilopediaText).takeUnless { ct -> ct==null || ct.isEmpty() }
+                        (it as? ICivilopediaText).takeUnless { ct -> ct==null || ct.isCivilopediaTextEmpty() }
                     )
                 }
 
@@ -305,30 +307,6 @@ class CivilopediaScreen(
 
         selectCategory(category)
         selectEntry(entry)
-    }
-
-    // Todo: potential synergy with map editor
-    private fun terrainImage(terrain: Terrain, ruleset: Ruleset, imageSize: Float): Actor {
-        val tileInfo = TileInfo()
-        tileInfo.ruleset = ruleset
-        when (terrain.type) {
-            TerrainType.NaturalWonder -> {
-                tileInfo.naturalWonder = terrain.name
-                tileInfo.baseTerrain = terrain.turnsInto ?: Constants.grassland
-            }
-            TerrainType.TerrainFeature -> {
-                tileInfo.terrainFeatures.add(terrain.name)
-                tileInfo.baseTerrain = terrain.occursOn.lastOrNull() ?: Constants.grassland
-            }
-            else ->
-                tileInfo.baseTerrain = terrain.name
-        }
-        tileInfo.setTerrainTransients()
-        val group = TileGroup(tileInfo, TileSetStrings(), imageSize)
-        group.showEntireMap = true
-        group.forMapEditorIcon = true
-        group.update()
-        return group
     }
 
     override fun resize(width: Int, height: Int) {

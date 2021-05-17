@@ -114,7 +114,7 @@ class BaseUnit : INamed, IConstruction, CivilopediaText() {
         }
         if (uniqueTo != null) {
             infoList += "[Nations/$uniqueTo] Unique to [$uniqueTo],"
-            infoList += "[Units/$replaces]  replaces [$replaces]"
+            infoList += "[Units/$replaces]   replaces [$replaces]"
         }
         if (requiredTech != null) infoList += "[Technologies/$requiredTech] Required tech: [$requiredTech]"
         if (upgradesTo != null) infoList += "[Units/$upgradesTo] Upgrades to [$upgradesTo]"

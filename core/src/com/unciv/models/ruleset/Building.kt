@@ -10,13 +10,16 @@ import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.fillPlaceholders
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.ICivilopediaText
 import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 import kotlin.math.pow
 
 
-class Building : NamedStats(), IConstruction {
+class Building : NamedStats(), IConstruction, ICivilopediaText {
+
+    override var civilopediaText = listOf<String>()
 
     var requiredTech: String? = null
 
@@ -213,10 +216,101 @@ class Building : NamedStats(), IConstruction {
         return stats
     }
 
+
+    override fun getCivilopediaTextHeader(): String =
+        (if (isWonder || isNationalWonder) "(Wonder/$name)" else "(Building/$name)") + super.getCivilopediaTextHeader()
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<String> {
+        val textList = ArrayList<String>()
+
+        if (uniqueTo != null) {
+            textList += "[Nations/$uniqueTo] Unique to [$uniqueTo],"
+            val replacesBuilding = ruleset.buildings[uniqueTo]
+            val isWonder = replacesBuilding != null && (replacesBuilding.isWonder || replacesBuilding.isNationalWonder)
+            textList += "[${if (isWonder) "Wonder" else "Building"}/$replaces]   replaces [$replaces]"
+        }
+        textList += "{Cost}: $cost"
+        if (isWonder) textList += "Wonder"
+        if (isNationalWonder) textList += "National Wonder"
+        if (requiredTech != null)
+            textList += "[Technologies/$requiredTech] Required tech: [$requiredTech]"
+        if (requiredBuilding != null)
+            textList += "[Building/$requiredBuilding] Requires [$requiredBuilding] to be built in the city"
+        if (requiredBuildingInAllCities != null)
+            textList += "[Building/$requiredBuildingInAllCities] Requires [$requiredBuildingInAllCities] to be built in all cities"
+        for ((resource, amount) in getResourceRequirements()) {
+            textList += if (amount == 1) "[Resources/$resource]+F42 Consumes 1 [$resource]"
+                        else "[Resources/$resource]+F42 Consumes [$amount] [$resource]"
+        }
+        if (providesFreeBuilding != null)
+            textList += "[Building/$providesFreeBuilding] Provides a free [$providesFreeBuilding] in the city"
+        if (uniques.isNotEmpty()) {
+            if (replacementTextForUniques != "")
+                textList += replacementTextForUniques
+            else
+                for (unique in getUniquesStrings()) textList += " $unique"
+        }
+        val stats = this.clone()
+        if (!stats.isEmpty())
+            textList += " $stats"
+
+        val percentStats = getStatPercentageBonuses(null)
+        if (percentStats.production != 0f) textList += " +" + percentStats.production.toInt() + "% {Production}"
+        if (percentStats.gold != 0f) textList += " +" + percentStats.gold.toInt() + "% {Gold}"
+        if (percentStats.science != 0f) textList += " +" + percentStats.science.toInt() + "% {Science}"
+        if (percentStats.food != 0f) textList += " +" + percentStats.food.toInt() + "% {Food}"
+        if (percentStats.culture != 0f) textList += " +" + percentStats.culture.toInt() + "% {Culture}"
+
+        if (this.greatPersonPoints != null) {
+            val gpp = this.greatPersonPoints!!
+            if (gpp.production != 0f) textList += "[Unit/Great Engineer] +" + gpp.production.toInt() + " " + "[Great Engineer] points".tr()
+            if (gpp.gold != 0f) textList += "[Unit/Great Merchant]  +" + gpp.gold.toInt() + " " + "[Great Merchant] points".tr()
+            if (gpp.science != 0f) textList += "[Unit/Great Scientist]  +" + gpp.science.toInt() + " " + "[Great Scientist] points".tr()
+            if (gpp.culture != 0f) textList += "[Unit/Great Artist]  +" + gpp.culture.toInt() + " " + "[Great Artist] points".tr()
+        }
+
+        for ((specialistName, amount) in newSpecialists())
+            textList += " +$amount " + "[$specialistName] slots".tr()
+
+        if (resourceBonusStats != null) {
+            val resources = ruleset.tileResources.values.filter { name == it.building }.joinToString { it.name.tr() }
+            textList += " $resources {provide} $resourceBonusStats"
+        }
+
+        if (requiredNearbyImprovedResources != null) {
+            requiredNearbyImprovedResources!!.withIndex().forEach {
+                textList += "[Resource/${it.value}] " +
+                        (if (it.index == 0) "Requires worked" else "  or") +
+                        " [" + it.value.tr() + "]" +
+                        (if (it.index == requiredNearbyImprovedResources!!.size-1) " near city" else "")
+            }
+        }
+
+        if (cityStrength != 0) textList += " {City strength} +$cityStrength"
+        if (cityHealth != 0) textList += " {City health} +$cityHealth"
+        if (xpForNewUnits != 0) textList += " +$xpForNewUnits {XP for new units}"
+        if (maintenance != 0) textList += "{Maintenance cost}: $maintenance {Gold}"
+
+        val seeAlso = ArrayList<String>()
+        for ((other, building) in ruleset.buildings) {
+            if (building.replaces == name || building.providesFreeBuilding == name || uniques.contains("[$name]") ) {
+                val isWonder = (building.isWonder || building.isNationalWonder)
+                seeAlso += "[${if (isWonder) "Wonder" else "Building"}/$other]   {$other}"
+            }
+        }
+        if (seeAlso.isNotEmpty()) {
+            textList += "{See also}:"
+            textList += seeAlso
+        }
+
+        return textList
+    }
+
+
     override fun canBePurchased(): Boolean {
         return !isWonder && !isNationalWonder && "Cannot be purchased" !in uniques
     }
-
 
     override fun getProductionCost(civInfo: CivilizationInfo): Int {
         var productionCost = cost.toFloat()
