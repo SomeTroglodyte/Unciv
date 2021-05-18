@@ -20,6 +20,18 @@ import com.unciv.models.stats.INamed
 import com.unciv.ui.utils.*
 import kotlin.math.max
 
+/* Ideas:
+ *    - Now we're using a Table container and inside one Table per line. Rendering order, in view of
+ *      texture swaps, is per Group, as this goes by ZIndex and that is implemented as actual index
+ *      into the parent's children array. So, we're SOL to get the number of texture switches down
+ *      with this structure, as many lines will require at least 2 texture switches.
+ *      So we should go for one big table with 4 columns (3 images, plus rest) and use colspan -
+ *      then group all images separate from labels via ZIndex.
+ *    - Do bold using Distance field fonts wrapped in something like [maltaisn/msdf-gdx](https://github.com/maltaisn/msdf-gdx)
+ *    - Do strikethrough by stacking a line on top (as rectangle with background like the separator but thinner)
+ *    - Do shadowed instead of italic (again Distance field fonts)
+ */
+
 /** just a shorthand as it's used often in this file */
 private typealias FC = MarkupRenderer.FormattingConstants
 

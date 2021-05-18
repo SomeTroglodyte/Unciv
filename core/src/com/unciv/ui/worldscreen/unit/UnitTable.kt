@@ -18,7 +18,7 @@ import com.unciv.ui.civilopedia.CivilopediaScreen
 import com.unciv.ui.pickerscreens.PromotionPickerScreen
 import com.unciv.ui.utils.*
 import com.unciv.ui.worldscreen.WorldScreen
-import sun.util.resources.cldr.hy.CalendarData_hy_AM
+//import sun.util.resources.cldr.hy.CalendarData_hy_AM
 
 class UnitTable(val worldScreen: WorldScreen) : Table(){
     private val prevIdleUnitButton = IdleUnitButton(this,worldScreen.mapHolder,true)
