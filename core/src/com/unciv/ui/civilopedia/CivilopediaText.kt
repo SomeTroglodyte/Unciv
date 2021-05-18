@@ -1,3 +1,12 @@
+/*  "unused" is for CivilopediaFormatting.bold,italic.strike - these are future expansion
+ *      and for the "FC" typealias - which is there for readability only, and indeed used,
+ *      but the compiler (1.4) will incorrectly flag it.
+ *  "not_null" is for CivilopediaFormatting.render(), call category.getImage: That Enum custom
+ *      property is a nullable reference to a lambda which in turn is allowed to return null.
+ *      Sorry, but without `!!` the code won't compile and with we'd get the incorrect warning.
+ */
+@file:Suppress("unused", "UNNECESSARY_NOT_NULL_ASSERTION")
+
 package com.unciv.ui.civilopedia
 
 import com.badlogic.gdx.Gdx
@@ -11,7 +20,7 @@ import com.unciv.models.stats.INamed
 import com.unciv.ui.utils.*
 import kotlin.math.max
 
-@Suppress("UNUSED_TYPEALIAS")
+/** just a shorthand as it's used often in this file */
 private typealias FC = MarkupRenderer.FormattingConstants
 
 /** Link types that can be expressed in markup */
@@ -63,6 +72,7 @@ object MarkupRenderer {
      *
      * - **[** `category/entryname` **⁆** (pair of square brackets) - create a civilopedia link (max 1 per line). Renders a link icon and a matching object icon if found.
      * - **(** `category/entryname` **)** (brackets) - include icon but do not link
+     * - **@** `size` - Modifies `(image)` which now renders an image from ExtraImages in the specified size, centered, nothing else for this row
      * - **#** (hash)- Increase header level by 1: applies to font size of whole line - 0 is 100% normal, 1=200%, 2=175%, 3=150%, 4=133%, 5=117%, 6=83%, 7=67%, 8=50%.
      * - **+** `######` (plus followed by a 6-digit hex number) - sets colour of whole line or, if set, the star only.
      * - **✯** (U+272F) - Adds a star icon, optionally coloured
@@ -72,9 +82,12 @@ object MarkupRenderer {
      * - ' ' (space) - Ends formatting explicitly and is not included in the resulting text. 2 or more increases indentation level, which places text at uniform indent independent of icon presence.
      *
      * The first character not matching one of these rules ends formatting, the rest of the string is rendered as text, and goes through translation as is.
+     *
      * Icon ordering is always link - object - star.
-     * Special case: "---" creates a separator line
-     * Special case: lines starting with http://, https:// or mailto: will default to sky-blue and get linked
+     *
+     * Special case: "---" creates a separator line.
+     *
+     * Special case: lines starting with http://, https:// or mailto: will default to sky-blue and get linked.
      */
     object FormattingConstants {            // public only to allow FC typealias
         const val defaultSize = 18
