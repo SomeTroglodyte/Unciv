@@ -84,7 +84,9 @@ object MarkupRenderer {
      *
      * - **[** `category/entryname` **⁆** (pair of square brackets) - create a civilopedia link (max 1 per line). Renders a link icon and a matching object icon if found.
      * - **(** `category/entryname` **)** (brackets) - include icon but do not link
-     * - **@** `size` - Modifies `(image)` which now renders an image from ExtraImages in the specified size, centered, nothing else for this row
+     * - **@** `size` - Modifies `(image)` which now renders an image from ExtraImages in the specified `size` (width),
+     *          centered, and nothing else for this row. Setting `size` to 'max' will fill available
+     *          width if renderer has been passed a width for label wrap. Aspect ratio should be preserved.
      * - **#** (hash)- Increase header level by 1: applies to font size of whole line - 0 is 100% normal, 1=200%, 2=175%, 3=150%, 4=133%, 5=117%, 6=83%, 7=67%, 8=50%.
      * - **+** `######` (plus followed by a 6-digit hex number) - sets colour of whole line or, if set, the star only.
      * - **✯** (U+272F) - Adds a star icon, optionally coloured
@@ -113,6 +115,7 @@ object MarkupRenderer {
         const val iconSymbol = '('
         const val iconClose = ')'
         const val iconSizeSymbol = '@'
+        const val iconSizeMax = "max"
         const val headerSymbol = '#'
         const val colorSymbol = '+'
         const val italicSymbol = '_'
@@ -144,16 +147,22 @@ object MarkupRenderer {
         fun render(skin: Skin, labelWidth: Float, noLinkImages: Boolean = false): Actor {
             if (linkType == LinkType.Image && linkTo != null) {
                 val table = Table(skin)
-                val image = when {
-                    ImageGetter.imageExists(linkTo) ->
-                        ImageGetter.getImage(linkTo)
-                    Gdx.files.internal("ExtraImages/$linkTo.png").exists() ->
-                        ImageGetter.getExternalImage("$linkTo.png")
-                    Gdx.files.internal("ExtraImages/$linkTo.jpg").exists() ->
-                        ImageGetter.getExternalImage("$linkTo.jpg")
-                    else -> return table
+                try {
+                    val image = when {
+                        ImageGetter.imageExists(linkTo) ->
+                            ImageGetter.getImage(linkTo)
+                        Gdx.files.internal("ExtraImages/$linkTo.png").exists() ->
+                            ImageGetter.getExternalImage("$linkTo.png")
+                        Gdx.files.internal("ExtraImages/$linkTo.jpg").exists() ->
+                            ImageGetter.getExternalImage("$linkTo.jpg")
+                        else -> return table
+                    }
+                    val width = if (imageSize == Int.MAX_VALUE) labelWidth else imageSize.toFloat()
+                    val height = width * image.height / image.width
+                    table.add(image).size(width, height)
+                } catch (exception: Exception) {
+                    println ("${exception.message}: ${exception.cause?.message}")
                 }
-                table.add(image).size(imageSize.toFloat())
                 return table
             }
             val fontSize = if (header>= FC.headerSizes.size) FC.defaultSize else FC.headerSizes[header]
@@ -239,12 +248,18 @@ object MarkupRenderer {
                     }
                 }
                 FC.iconSizeSymbol -> {
-                    var endPos = i + 1
-                    while (endPos < line.length && line[endPos].isDigit()) endPos++
-                    if (endPos > i + 1) {
+                    if (i+1+FC.iconSizeMax.length <= line.length && line.substring(i+1,i+1+FC.iconSizeMax.length) == FC.iconSizeMax) {
                         linkType = LinkType.Image
-                        imageSize = line.substring(i + 1, endPos).toInt()
-                        i = endPos - 1
+                        imageSize = Int.MAX_VALUE
+                        i += FC.iconSizeMax.length
+                    } else {
+                        var endPos = i + 1
+                        while (endPos < line.length && line[endPos].isDigit()) endPos++
+                        if (endPos > i + 1) {
+                            linkType = LinkType.Image
+                            imageSize = line.substring(i + 1, endPos).toInt()
+                            i = endPos - 1
+                        }
                     }
                 }
                 FC.headerSymbol -> header++
@@ -289,9 +304,17 @@ object MarkupRenderer {
     }
 }
 
-/** Storage class for interface [ICivilopediaText] */
+/** Storage class for interface [ICivilopediaText] for use as base class */
 open class CivilopediaText : ICivilopediaText {
     override var civilopediaText = listOf<String>()
+}
+/** Storage class for instantiation of the simplest form containing only the lines collection */
+class SimpleCivilopediaText(lines: List<String>, val isComplete: Boolean = false) : CivilopediaText() {
+    init {
+        civilopediaText = lines
+    }
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = isComplete
 }
 
 /** Addon common to most ruleset game objects managing civilopedia display

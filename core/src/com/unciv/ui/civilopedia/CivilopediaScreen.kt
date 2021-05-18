@@ -133,7 +133,6 @@ class CivilopediaScreen(
      * @param noScrollAnimation Disable scroll animation
      */
     fun selectEntry(name: String, noScrollAnimation: Boolean = false) {
-        currentEntry = name
         val entry = entryIndex[name] ?: return
         // fails: entrySelectScroll.scrollTo(0f, entry.y, 0f, entry.h, false, true)
         entrySelectScroll.let {
@@ -144,6 +143,7 @@ class CivilopediaScreen(
         selectEntry(entry)
     }
     private fun selectEntry(entry: CivilopediaEntry) {
+        currentEntry = entry.name
         if(entry.flavour != null && entry.flavour.replacesCivilopediaDescription()) {
             descriptionLabel.setText("")
             descriptionLabel.isVisible = false
@@ -256,7 +256,13 @@ class CivilopediaScreen(
                 }
 
         categoryToEntries[CivilopediaCategories.Tutorial] = tutorialController.getCivilopediaTutorials()
-                .map { CivilopediaEntry(it.key.replace("_", " "), it.value.joinToString("\n\n") { line -> line.tr() }) }
+                .map {
+                    CivilopediaEntry(
+                        it.key.replace("_", " "),
+                        it.value.joinToString("\n\n") { line -> line.tr() },
+                        flavour = SimpleCivilopediaText(it.value.toList(), isComplete = true)
+                    )
+                }
 
         categoryToEntries[CivilopediaCategories.Difficulty] = ruleset.difficulties.values
                 .map { CivilopediaEntry(it.name, it.getDescription()) }
