@@ -1,5 +1,6 @@
 import com.unciv.build.BuildConfig.gdxVersion
 import com.unciv.build.BuildConfig.kotlinVersion
+import com.unciv.build.BuildConfig.msdfVersion
 import com.unciv.build.BuildConfig.roboVMVersion
 
 buildscript {
@@ -18,7 +19,7 @@ buildscript {
         maven{ url = uri("https://jitpack.io") } // for the anuken packr
     }
     dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${com.unciv.build.BuildConfig.kotlinVersion}")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
         classpath("de.richsource.gradle.plugins:gwt-gradle-plugin:0.6")
         classpath("com.android.tools.build:gradle:4.2.0")
         classpath("com.mobidevelop.robovm:robovm-gradle-plugin:2.3.1")
@@ -103,6 +104,7 @@ project(":core") {
 
     dependencies {
         "implementation"("com.badlogicgames.gdx:gdx:$gdxVersion")
+        "implementation"("com.maltaisn:msdf-gdx:$msdfVersion")
         "implementation"("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
     }
 

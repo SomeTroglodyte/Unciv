@@ -16,6 +16,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport
 import com.unciv.UncivGame
 import com.unciv.models.Tutorial
 import com.unciv.ui.tutorials.TutorialController
+import com.unciv.ui.utils.Fonts.addMsdfFont
 
 open class CameraStageBaseScreen : Screen {
 
@@ -86,6 +87,7 @@ open class CameraStageBaseScreen : Screen {
             Fonts.resetFont()
             skin = Skin().apply {
                 add("Nativefont", Fonts.font, BitmapFont::class.java)
+                addMsdfFont()
                 add("Button", ImageGetter.getRoundedEdgeTableBackground(), Drawable::class.java)
                 addRegions(TextureAtlas("skin/flat-earth-ui.atlas"))
                 load(Gdx.files.internal("skin/flat-earth-ui.json"))

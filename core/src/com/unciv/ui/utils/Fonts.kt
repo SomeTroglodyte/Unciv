@@ -1,5 +1,6 @@
 package com.unciv.ui.utils
 
+import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
@@ -9,9 +10,13 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont.Glyph
 import com.badlogic.gdx.graphics.g2d.GlyphLayout
 import com.badlogic.gdx.graphics.g2d.PixmapPacker
 import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.utils.Array
 import com.badlogic.gdx.utils.Disposable
 import com.unciv.UncivGame
+import com.maltaisn.msdfgdx.MsdfFont
+import com.maltaisn.msdfgdx.MsdfShader
+
 
 interface NativeFontImplementation {
     fun getFontSize(): Int
@@ -152,4 +157,13 @@ object Fonts {
     const val movement = '➡'
     const val range = '…'
     const val production = '⚙'
+
+    const val defaultMsdfFontPath = "font/GothicA1.fnt"     // or GothicA1
+    const val defaultMsdfFontName = "msdf"
+    fun Skin.addMsdfFont(path: String, name: String) {
+        add("default", MsdfShader())
+        add(name, MsdfFont(Gdx.files.internal(path), 50f, 8f))
+    }
+    fun Skin.addMsdfFont() = this.addMsdfFont(defaultMsdfFontPath, defaultMsdfFontName)
 }
+

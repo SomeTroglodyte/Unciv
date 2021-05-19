@@ -11,12 +11,16 @@ package com.unciv.ui.civilopedia
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.utils.Align
+import com.maltaisn.msdfgdx.FontStyle
+import com.maltaisn.msdfgdx.widget.MsdfLabel
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.stats.INamed
+import com.unciv.models.translations.tr
 import com.unciv.ui.utils.*
 import kotlin.math.max
 
@@ -167,8 +171,23 @@ object MarkupRenderer {
             }
             val fontSize = if (header>= FC.headerSizes.size) FC.defaultSize else FC.headerSizes[header]
             val labelColor = if(starred) FC.defaultColor else color
+
+/*
             val label = if (fontSize == FC.defaultSize && labelColor == FC.defaultColor) line.toLabel()
-            else line.toLabel(labelColor,fontSize)
+                        else line.toLabel(labelColor,fontSize)
+*/
+            val fontStyle = FontStyle()
+                .setFontName(Fonts.defaultMsdfFontName)
+                .setSize(fontSize.toFloat())
+                .setWeight(if (bold) FontStyle.WEIGHT_BOLD * 2 else FontStyle.WEIGHT_REGULAR)
+                .setColor(labelColor)
+            if (italic) {
+                fontStyle.shadowOffset = Vector2(fontSize * 0.1f, fontSize * 0.1f)
+                fontStyle.shadowColor = Color.BLACK
+                fontStyle.shadowSmoothing =  0.5f
+            }
+            val label = MsdfLabel(line.tr(), CameraStageBaseScreen.skin, fontStyle)
+
             label.wrap = !centered && labelWidth > 0f
             val table = Table(skin)
             var iconCount = 0
