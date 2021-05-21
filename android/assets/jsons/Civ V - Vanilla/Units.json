@@ -37,7 +37,8 @@
 		"cost": 40,
 		"obsoleteTech": "Metal Casting",
 		"upgradesTo": "Swordsman",
-		"attackSound": "nonmetalhit"
+		"attackSound": "nonmetalhit",
+        "civilopediaText": [{text:"Your basic, club-toting, stone-age fighting man (or woman)."}]
 	},
 	{
 		"name": "Maori Warrior",

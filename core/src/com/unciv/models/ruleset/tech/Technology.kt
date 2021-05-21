@@ -7,9 +7,11 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.Unique
 import com.unciv.models.translations.tr
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.ui.civilopedia.CivilopediaText
+import com.unciv.ui.civilopedia.FormattedLine
 import java.util.*
 
-class Technology {
+class Technology: CivilopediaText() {
 
     lateinit var name: String
 
@@ -120,4 +122,81 @@ class Technology {
     fun era(): String = column!!.era
 
     fun isContinuallyResearchable() = uniques.contains("Can be continually researched")
+
+    override fun getCivilopediaTextHeader() = FormattedLine(name, icon="Technology/$name", header=2)
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<FormattedLine> {
+        val lineList = ArrayList<FormattedLine>()
+
+        for (unique in uniques) lineList += FormattedLine(unique)
+        var wantEmpty = uniques.isNotEmpty()
+
+        for (improvement in ruleset.tileImprovements.values)
+            for (unique in improvement.uniqueObjects) {
+                if (unique.placeholderText == "[] once [] is discovered" && unique.params.last() == name) {
+                    if (wantEmpty) { lineList += FormattedLine(); wantEmpty = false }
+                    lineList += FormattedLine("[${unique.params[0]}] from every [${improvement.name}]",
+                        link="Improvement/${improvement.name}")
+                } else if (unique.placeholderText == "[] on [] tiles once [] is discovered" && unique.params.last() == name) {
+                    if (wantEmpty) { lineList += FormattedLine(); wantEmpty = false }
+                    lineList += FormattedLine("[${unique.params[0]}] from every [${improvement.name}] on [${unique.params[1]}] tiles",
+                        link="Improvement/${improvement.name}")
+                }
+            }
+
+        val viewingCiv = UncivGame.Current.worldScreen.viewingCiv
+        val enabledUnits = getEnabledUnits(viewingCiv).filter { "Will not be displayed in Civilopedia" !in it.uniques }
+        if (enabledUnits.isNotEmpty()) {
+            lineList += FormattedLine()
+            lineList += FormattedLine("{Units enabled}:")
+            for (unit in enabledUnits)
+                lineList += FormattedLine(unit.name.tr() + " (" + unit.getShortDescription() + ")",
+                    link="Unit/${unit.name}")
+        }
+
+        val enabledBuildings = getEnabledBuildings(viewingCiv)
+            .filter { "Will not be displayed in Civilopedia" !in it.uniques }
+            .partition { it.isWonder || it.isNationalWonder }
+        if (enabledBuildings.first.isNotEmpty()) {
+            lineList += FormattedLine()
+            lineList += FormattedLine("{Wonders enabled}:")
+            for (wonder in enabledBuildings.first)
+                lineList += FormattedLine(wonder.name.tr() + " (" + wonder.getShortDescription(ruleset) + ")",
+                    link="Wonder/${wonder.name}")
+        }
+        if (enabledBuildings.second.isNotEmpty()) {
+            lineList += FormattedLine()
+            lineList += FormattedLine("{Buildings enabled}:")
+            for (building in enabledBuildings.second)
+                lineList += FormattedLine(building.name.tr() + " (" + building.getShortDescription(ruleset) + ")",
+                    link="Building/${building.name}")
+        }
+
+        wantEmpty = true
+        for (building in getObsoletedBuildings(viewingCiv)
+                .filter { "Will not be displayed in Civilopedia" !in it.uniques }) {
+            if (wantEmpty) { lineList += FormattedLine(); wantEmpty = false }
+            lineList += FormattedLine("[${building.name}] obsoleted", link="Building/${building.name}")
+        }
+
+        wantEmpty = true
+        for (resource in ruleset.tileResources.values.asSequence()
+                .filter { it.revealedBy == name }.map { it.name }) {
+            if (wantEmpty) { lineList += FormattedLine(); wantEmpty = false }
+            lineList += FormattedLine("Reveals [$resource] on the map", link="Resource/$resource")
+        }
+
+        val tileImprovements = ruleset.tileImprovements.values.filter { it.techRequired == name }
+        if (tileImprovements.isNotEmpty()) {
+            lineList += FormattedLine()
+            lineList += FormattedLine("{Tile improvements enabled}:")
+            tileImprovements.forEach {
+                lineList += FormattedLine("$it", link="Improvement/$it")
+            }
+        }
+
+        return lineList
+    }
 }

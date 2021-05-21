@@ -4,14 +4,18 @@ import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.stats.NamedStats
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.FormattedLine
+import com.unciv.ui.civilopedia.ICivilopediaText
 import java.util.*
 
-class TileResource : NamedStats() {
+class TileResource : NamedStats(), ICivilopediaText {
 
     var resourceType: ResourceType = ResourceType.Bonus
     var terrainsCanBeFoundOn: List<String> = listOf()
     var improvement: String? = null
     var improvementStats: Stats? = null
+
+    override var civilopediaText = listOf<FormattedLine>()
 
     /**
      * The building that improves this resource, if any. E.G.: Granary for wheat, Stable for cattle.
@@ -30,7 +34,7 @@ class TileResource : NamedStats() {
         val terrainsCanBeBuiltOnString: ArrayList<String> = arrayListOf()
         terrainsCanBeBuiltOnString.addAll(terrainsCanBeFoundOn.map { it.tr() })
         stringBuilder.appendLine("Can be found on ".tr() + terrainsCanBeBuiltOnString.joinToString(", "))
-        stringBuilder.appendln()
+        stringBuilder.appendLine()
         stringBuilder.appendLine("Improved by [$improvement]".tr())
         stringBuilder.appendLine("{Bonus stats for improvement}: ".tr() + "$improvementStats".tr())
 
@@ -47,7 +51,63 @@ class TileResource : NamedStats() {
         if (unique != null) stringBuilder.appendLine(unique!!.tr())
         return stringBuilder.toString()
     }
+
+    override fun getCivilopediaTextHeader() = FormattedLine(name, icon="Resource/$name", header=2)
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<FormattedLine> {
+        val textList = ArrayList<FormattedLine>()
+
+        textList += FormattedLine("{${resourceType.name}} {resource}", header=4, color=resourceType.color)
+
+        textList += FormattedLine(this.clone().toString())
+
+        if (terrainsCanBeFoundOn.isNotEmpty()) {
+            textList += FormattedLine()
+            if (terrainsCanBeFoundOn.size == 1) {
+                with (terrainsCanBeFoundOn[0]) {
+                    textList += FormattedLine("{Can be found on} {$this}", link="Terrain/$this")
+                }
+            } else {
+                textList += FormattedLine("{Can be found on}:")
+                terrainsCanBeFoundOn.forEach {
+                    textList += FormattedLine(it, link="Terrain/$it", indent=1)
+                }
+            }
+        }
+
+        textList += FormattedLine()
+        textList += FormattedLine("Improved by [$improvement]", link="Improvement/$improvement")
+        if (improvementStats != null && !improvementStats!!.isEmpty())
+            textList += FormattedLine("{Bonus stats for improvement}: " + improvementStats.toString())
+
+        val buildingsThatConsumeThis = ruleset.buildings.values.filter { it.getResourceRequirements().containsKey(name) }
+        if (buildingsThatConsumeThis.isNotEmpty()) {
+            textList += FormattedLine()
+            textList += FormattedLine("{Buildings that consume this resource}:")
+            buildingsThatConsumeThis.forEach {
+                textList += FormattedLine(it.name, link="Building/${it.name}", indent=1)
+            }
+        }
+
+        val unitsThatConsumeThis = ruleset.units.values.filter { it.getResourceRequirements().containsKey(name) }
+        if (unitsThatConsumeThis.isNotEmpty()) {
+            textList += FormattedLine()
+            textList += FormattedLine("{Units that consume this resource}: ")
+            unitsThatConsumeThis.forEach {
+                textList += FormattedLine(it.name, link="Unit/${it.name}", indent=1)
+            }
+        }
+
+        if (unique != null) {
+            textList += FormattedLine()
+            textList += FormattedLine(unique!!)
+        }
+        return textList
+    }
 }
+
 
 data class ResourceSupply(val resource:TileResource,var amount:Int, val origin:String)
 
