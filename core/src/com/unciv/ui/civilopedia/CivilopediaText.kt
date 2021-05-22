@@ -214,7 +214,7 @@ class FormattedLine (
             iconCount++
         }
         if (iconToDisplay.isNotEmpty() && !noLinkImages) {
-            val parts = link.split('/', limit = 2)
+            val parts = iconToDisplay.split('/', limit = 2)
             if (parts.size == 2) {
                 val category = CivilopediaCategories.fromLink(parts[0])
                 if (category != null) {

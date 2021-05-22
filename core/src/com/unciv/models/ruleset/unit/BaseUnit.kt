@@ -133,7 +133,7 @@ class BaseUnit : INamed, IConstruction, CivilopediaText() {
         if (uniqueTo != null) {
             textList += FormattedLine()
             textList += FormattedLine("Unique to [$uniqueTo],", link="Nation/$uniqueTo")
-            textList += FormattedLine("replaces [$replaces]", link="Unit/$replaces", indent=2)
+            textList += FormattedLine("replaces [$replaces]", link="Unit/$replaces", indent=1)
         }
 
         if (requiredTech != null || upgradesTo != null || obsoleteTech != null) textList += FormattedLine()
@@ -154,6 +154,18 @@ class BaseUnit : INamed, IConstruction, CivilopediaText() {
                         link="Promotions/${it.value}",
                         indent=if(it.index==0) 0 else 1)
             }
+        }
+
+        val seeAlso = ArrayList<FormattedLine>()
+        for ((other, unit) in ruleset.units) {
+            if (unit.replaces == name || uniques.contains("[$name]") ) {
+                seeAlso += FormattedLine(other, link="Unit/$other", indent=1)
+            }
+        }
+        if (seeAlso.isNotEmpty()) {
+            textList += FormattedLine()
+            textList += FormattedLine("{See also}:")
+            textList += seeAlso
         }
 
         return textList

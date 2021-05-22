@@ -231,7 +231,7 @@ class Building : NamedStats(), IConstruction, ICivilopediaText {
         if (uniqueTo != null) {
             textList += FormattedLine()
             textList += FormattedLine("Unique to [$uniqueTo],", link="Nation/$uniqueTo")
-            val replacesBuilding = ruleset.buildings[uniqueTo]
+            val replacesBuilding = ruleset.buildings[replaces]
             textList += FormattedLine("replaces [$replaces]", link=replacesBuilding?.makeLink() ?: "", indent=1)
         }
 
@@ -265,20 +265,20 @@ class Building : NamedStats(), IConstruction, ICivilopediaText {
             textList += FormattedLine("Provides a free [$providesFreeBuilding] in the city",
                 link="Building/$providesFreeBuilding")
         }
-        if (uniques.isNotEmpty()) {
+
+        val stats = this.clone()
+        val percentStats = getStatPercentageBonuses(null)
+        val specialists = newSpecialists()
+        if (uniques.isNotEmpty() || !stats.isEmpty() || !percentStats.isEmpty() || this.greatPersonPoints != null || specialists.isNotEmpty() || resourceBonusStats != null)
             textList += FormattedLine()
+
+        if (uniques.isNotEmpty()) {
             if (replacementTextForUniques != "")
                 textList += FormattedLine(replacementTextForUniques)
             else
                 for (unique in getUniquesStrings()) textList += FormattedLine(unique)
         }
 
-        val stats = this.clone()
-        val percentStats = getStatPercentageBonuses(null)
-        val specialists = newSpecialists()
-
-        if (!stats.isEmpty() || !percentStats.isEmpty() || this.greatPersonPoints != null || specialists.isNotEmpty() || resourceBonusStats != null)
-            textList += FormattedLine()
         if (!stats.isEmpty()) {
             textList += FormattedLine(stats.toString())
         }

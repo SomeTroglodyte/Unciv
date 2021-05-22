@@ -130,6 +130,34 @@ class Technology: CivilopediaText() {
     override fun getCivilopediaTextLines(ruleset: Ruleset): List<FormattedLine> {
         val lineList = ArrayList<FormattedLine>()
 
+        if (quote.isNotEmpty()) {
+            lineList += FormattedLine(quote, size=21, color="#DCB")
+            lineList += FormattedLine()
+        }
+        if (prerequisites.isNotEmpty()) {
+            prerequisites.withIndex().forEach { 
+                lineList += FormattedLine(
+                    if (it.index==0) "Requires [${it.value}]"
+                    else "{and} {${it.value}}",
+                    link="Technology/${it.value}",
+                    indent=if (it.index==0) 0 else 1
+                )
+            }
+        }
+        val leadsTo = ruleset.technologies.values.filter { name in it.prerequisites }
+        if (leadsTo.isNotEmpty()) {
+            leadsTo.withIndex().forEach {
+                lineList += FormattedLine(
+                    if (it.index==0) "Leads to [${it.value.name}]"
+                    else "{and} {${it.value.name}}",
+                    link="Technology/${it.value.name}",
+                    indent=if (it.index==0) 0 else 1
+                )
+            }
+        }
+
+        if (prerequisites.isNotEmpty() || leadsTo.isNotEmpty())
+            lineList += FormattedLine()
         for (unique in uniques) lineList += FormattedLine(unique)
         var wantEmpty = uniques.isNotEmpty()
 
