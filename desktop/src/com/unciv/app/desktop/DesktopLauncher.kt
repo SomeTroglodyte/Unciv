@@ -170,7 +170,7 @@ internal object DesktopLauncher {
         val atlasFile = File("$output${File.separator}$packFileName.atlas")
         if (atlasFile.exists() && File("$output${File.separator}$packFileName.png").exists()) {
             val atlasModTime = atlasFile.lastModified()
-            if (!File(input).listTree().any { it.extension in listOf("png", "jpg", "jpeg") && it.lastModified() > atlasModTime }) return
+            if (File(input).listTree().none { it.extension in listOf("png", "jpg", "jpeg") && it.lastModified() > atlasModTime }) return
         }
 
         TexturePacker.process(settings, input, output, packFileName)
