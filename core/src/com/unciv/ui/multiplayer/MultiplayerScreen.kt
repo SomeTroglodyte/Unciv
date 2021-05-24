@@ -10,7 +10,9 @@ import com.unciv.logic.UncivShowableException
 import com.unciv.models.translations.tr
 import com.unciv.ui.pickerscreens.PickerScreen
 import com.unciv.ui.utils.*
+import com.unciv.ui.worldscreen.mainmenu.DropBox
 import com.unciv.ui.worldscreen.mainmenu.OnlineMultiplayer
+import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
@@ -37,6 +39,13 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
     private val copyUserIdButton = TextButton(copyUserIdText, skin)
     private val refreshButton = TextButton(refreshText, skin)
 
+    @Suppress("SpellCheckingInspection")
+    private val utcFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+    /** Parse an UTC date as passed by online API's
+     * example: `"2021-04-11T14:43:33Z".parseDate()`
+     */
+    fun String.parseDate(): Date = utcFormat.parse(this)
+
     init {
         setDefaultCloseAction(previousScreen)
 
@@ -58,9 +67,62 @@ class MultiplayerScreen(previousScreen: CameraStageBaseScreen) : PickerScreen() 
             helpPopup.addCloseButton()
             helpPopup.open()
         }
-        tab.add(helpButton)
-        tab.x = (stage.width - helpButton.width)
-        tab.y = (stage.height - helpButton.height)
+        tab.add(helpButton).row()
+
+        val cleanupButton = TextButton("cleanup", skin)
+        cleanupButton.onClick {
+            var progressLabel = "...".toLabel()
+            
+            var stopThread = false
+            val listThread = thread(name="DripboxLitter") {
+                var countTotal = 0L
+                var countDeleted = 0L
+                var sizeTotal = 0L
+                var sizeDeleted = 0L
+                DropBox.getFolderList("/MultiplayerGames") {
+                    folders ->
+                    val oldestLimit = Date().time - 1000L * 86400 * 365 * 1     // 1 Year
+                    for (entry in folders.entries) {
+                        if (stopThread) break
+                        println("Dropbox: path=${entry.path_display}, name=${entry.name}, modified=${entry.client_modified}")
+                        countTotal++
+                        sizeTotal += entry.size
+                        val date = try {
+                            entry.client_modified.parseDate()
+                        } catch(ex: Exception) {
+                            println("Exception parsing ${entry.client_modified}: ${ex.message}")
+                            null
+                        }
+                        if (date != null && date.time < oldestLimit) {
+                            try {
+                                DropBox.deleteFile(entry.path_display)
+                                countDeleted++
+                                sizeDeleted += entry.size
+                                Thread.sleep(100)
+                            } catch(ex: Exception) {
+                                println("Exception deleting ${entry.name}: ${ex.message}")
+                            }
+                        }
+                        Gdx.app.postRunnable {
+                            progressLabel.setText("$countTotal files, $sizeTotal bytes scanned / $countDeleted files, $sizeDeleted bytes deleted.")
+                        }
+                    }
+                    stopThread   // return true to abort
+                }
+            }
+            val popup = Popup(this)
+            popup.addGoodSizedLabel("Internal use - the UI is on the console!").row()
+            popup.add(progressLabel).row()
+            popup.addCloseButton {
+                stopThread = true
+                listThread.interrupt()
+            }
+            popup.open(true)
+        }
+        tab.add(cleanupButton)
+
+        tab.x = (stage.width - cleanupButton.width)
+        tab.y = (stage.height - cleanupButton.height)
         stage.addActor(tab)
 
         //TopTable Setup

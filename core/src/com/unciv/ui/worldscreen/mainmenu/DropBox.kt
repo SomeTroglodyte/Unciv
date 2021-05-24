@@ -50,7 +50,7 @@ object DropBox {
         }
     }
 
-    fun getFolderList(folder: String): ArrayList<FolderListEntry> {
+    fun getFolderList(folder: String, chunkAction: ((chunk: FolderList)->Boolean)? = null): ArrayList<FolderListEntry> {
         val folderList = ArrayList<FolderListEntry>()
         // The DropBox API returns only partial file listings from one request. list_folder and
         // list_folder/continue return similar responses, but list_folder/continue requires a cursor
@@ -58,11 +58,17 @@ object DropBox {
         val response = dropboxApi("https://api.dropboxapi.com/2/files/list_folder",
                 "{\"path\":\"$folder\"}", "application/json")
         var currentFolderListChunk = GameSaver.json().fromJson(FolderList::class.java, response)
+        if (chunkAction != null) {
+            if (chunkAction(currentFolderListChunk)) return folderList
+        }
         folderList.addAll(currentFolderListChunk.entries)
         while (currentFolderListChunk.has_more) {
             val continuationResponse = dropboxApi("https://api.dropboxapi.com/2/files/list_folder/continue",
                     "{\"cursor\":\"${currentFolderListChunk.cursor}\"}", "application/json")
             currentFolderListChunk = GameSaver.json().fromJson(FolderList::class.java, continuationResponse)
+            if (chunkAction != null) {
+                if (chunkAction(currentFolderListChunk)) return folderList
+            }
             folderList.addAll(currentFolderListChunk.entries)
         }
         return folderList
@@ -87,8 +93,11 @@ object DropBox {
     }
 
     fun deleteFile(fileName: String){
-        dropboxApi("https://api.dropboxapi.com/2/files/delete_v2",
+        val stream = dropboxApi("https://api.dropboxapi.com/2/files/delete_v2",
                 "{\"path\":\"$fileName\"}", "application/json")
+        if (stream == null) return
+        val message = BufferedReader(InputStreamReader(stream)).readText()
+        println(message)
     }
 //
 //    fun createTemplate(): String {
@@ -106,8 +115,18 @@ object DropBox {
     }
 
     class FolderListEntry{
+        // ".tag": "file"
+        // "id": "id:2lRu47IaXWkAAAAAAABJhg"
         var name=""
+        // "path_lower" -> same as path_display lowercased
         var path_display=""
+        var client_modified=""
+        // "server_modified": "2020-03-13T09:35:20Z"
+        // "rev": "015a0b930259d6e000000016253fa70"
+        var size = 0L
+        // "size": 5880
+        // "is_downloadable": true 
+        // "content_hash": "7240cfd32c54b601d47a3d00df07784ff9ecb4b30d20c0603f29950b12652b6e"
     }
 
 }
