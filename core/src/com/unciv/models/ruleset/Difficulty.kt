@@ -3,8 +3,10 @@ package com.unciv.models.ruleset
 import com.unciv.Constants
 import com.unciv.models.stats.INamed
 import com.unciv.models.translations.tr
+import com.unciv.ui.civilopedia.CivilopediaText
+import com.unciv.ui.civilopedia.FormattedLine
 
-class Difficulty: INamed {
+class Difficulty: INamed, CivilopediaText() {
     override lateinit var name: String
     var baseHappiness: Int = 0
     var extraHappinessPerLuxury: Float = 0f
@@ -39,7 +41,17 @@ class Difficulty: INamed {
         }
     }
 
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<FormattedLine> {
+        return getLines().map { FormattedLine(it) }
+    }
     fun getDescription(): String {
+        return getLines().joinToString("\n") { it.tr() }
+    }
+
+    private fun getLines(): List<String> {
         val lines = ArrayList<String>()
         lines += "Player settings"
         lines += " - {Base Happiness}: $baseHappiness"
@@ -66,8 +78,6 @@ class Difficulty: INamed {
         lines += ""
         lines += "{Turns until barbarians enter player tiles}: $turnBarbariansCanEnterPlayerTiles"
         lines += "{Gold reward for clearing barbarian camps}: $clearBarbarianCampReward"
-
-        return lines.joinToString("\n") { it.tr() }
+        return lines
     }
-
 }

@@ -7,8 +7,11 @@ import com.unciv.logic.civilization.CivilizationInfo
 import com.unciv.logic.map.MapUnit
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.Unique
-import com.unciv.models.stats.INamed
+import com.unciv.models.translations.Translations
 import com.unciv.models.translations.tr
+import com.unciv.models.stats.INamed
+import com.unciv.ui.civilopedia.CivilopediaText
+import com.unciv.ui.civilopedia.FormattedLine
 import com.unciv.ui.utils.Fonts
 import kotlin.math.pow
 
@@ -16,7 +19,7 @@ import kotlin.math.pow
 
 /** This is the basic info of the units, as specified in Units.json,
  in contrast to MapUnit, which is a specific unit of a certain type that appears on the map */
-class BaseUnit : INamed, IConstruction {
+class BaseUnit : INamed, IConstruction, CivilopediaText() {
 
     override lateinit var name: String
     var cost: Int = 0
@@ -56,7 +59,7 @@ class BaseUnit : INamed, IConstruction {
         val sb = StringBuilder()
         for ((resource, amount) in getResourceRequirements()) {
             if (amount == 1) sb.appendLine("Consumes 1 [$resource]".tr())
-            else sb.appendLine("Consumes [$amount]] [$resource]".tr())
+            else sb.appendLine("Consumes [$amount] [$resource]".tr())
         }
         if (!forPickerScreen) {
             if (uniqueTo != null) sb.appendLine("Unique to [$uniqueTo], replaces [$replaces]".tr())
@@ -82,6 +85,90 @@ class BaseUnit : INamed, IConstruction {
         }
 
         return sb.toString().trim()
+    }
+
+    override fun getCivilopediaTextHeader() = FormattedLine(name, icon="Unit/$name", header=2)
+    override fun replacesCivilopediaDescription() = true
+    override fun hasCivilopediaTextLines() = true
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<FormattedLine> {
+        val textList = ArrayList<FormattedLine>()
+
+        val stats = ArrayList<String>()
+        if (strength != 0) stats += "$strength${Fonts.strength}"
+        if (rangedStrength != 0) {
+            stats += "$rangedStrength${Fonts.rangedStrength}"
+            stats += "$range${Fonts.range}"
+        }
+        if (movement != 0) stats += "$movement${Fonts.movement}"
+        if (cost != 0) stats += "{Cost}: $cost"
+        if (stats.isNotEmpty())
+            textList += FormattedLine(stats.joinToString(", "))
+
+        if (replacementTextForUniques != "") {
+            textList += FormattedLine()
+            textList += FormattedLine(replacementTextForUniques)
+        } else if (uniques.isNotEmpty()) {
+            textList += FormattedLine()
+            for (uniqueObject in uniqueObjects.sortedBy { it.text }) {
+                if (uniqueObject.placeholderText == "Can construct []") {
+                    val improvement = uniqueObject.params[0]
+                    textList += FormattedLine(uniqueObject.text, link="Improvement/$improvement")
+                } else {
+                    textList += FormattedLine(uniqueObject.text)
+                }
+            }
+        }
+
+        val resourceRequirements = getResourceRequirements()
+        if (resourceRequirements.isNotEmpty()) {
+            textList += FormattedLine()
+            for ((resource, amount) in resourceRequirements) {
+                textList += FormattedLine(
+                    if (amount == 1) "Consumes 1 [$resource]" else "Consumes [$amount] [$resource]",
+                    link="Resource/$resource", color="#F42")
+            }
+        }
+
+        if (uniqueTo != null) {
+            textList += FormattedLine()
+            textList += FormattedLine("Unique to [$uniqueTo],", link="Nation/$uniqueTo")
+            if (replaces != null)
+                textList += FormattedLine("replaces [$replaces]", link="Unit/$replaces", indent=1)
+        }
+
+        if (requiredTech != null || upgradesTo != null || obsoleteTech != null) textList += FormattedLine()
+        if (requiredTech != null) textList += FormattedLine("Required tech: [$requiredTech]", link="Technology/$requiredTech")
+        if (upgradesTo != null) textList += FormattedLine("Upgrades to [$upgradesTo]", link="Unit/$upgradesTo")
+        if (obsoleteTech != null) textList += FormattedLine("Obsolete with [$obsoleteTech]", link="Technology/$obsoleteTech")
+
+        if (promotions.isNotEmpty()) {
+            textList += FormattedLine()
+            promotions.withIndex().forEach {
+                textList += FormattedLine(
+                        when {
+                            promotions.size == 1 -> "{Free promotion:} "
+                            it.index == 0 -> "{Free promotions:} "
+                            else -> ""
+                        } + "{${it.value}}" +
+                        (if (promotions.size == 1 || it.index == promotions.size - 1) "" else ","),
+                        link="Promotions/${it.value}",
+                        indent=if(it.index==0) 0 else 1)
+            }
+        }
+
+        val seeAlso = ArrayList<FormattedLine>()
+        for ((other, unit) in ruleset.units) {
+            if (unit.replaces == name || uniques.contains("[$name]") ) {
+                seeAlso += FormattedLine(other, link="Unit/$other", indent=1)
+            }
+        }
+        if (seeAlso.isNotEmpty()) {
+            textList += FormattedLine()
+            textList += FormattedLine("{See also}:")
+            textList += seeAlso
+        }
+
+        return textList
     }
 
     fun getMapUnit(ruleset: Ruleset): MapUnit {

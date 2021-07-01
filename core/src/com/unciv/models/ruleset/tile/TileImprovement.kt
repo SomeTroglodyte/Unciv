@@ -109,5 +109,76 @@ class TileImprovement : NamedStats(), ICivilopediaText {
             else -> false
         }
     }
+    override fun getCivilopediaTextHeader() = FormattedLine(name, icon="Improvement/$name", header=2)
+    override fun hasCivilopediaTextLines() = true
+    override fun replacesCivilopediaDescription() = true
+
+    override fun getCivilopediaTextLines(ruleset: Ruleset): List<FormattedLine> {
+        val textList = ArrayList<FormattedLine>()
+
+        val statsDesc = this.clone().toString()
+        if (statsDesc.isNotEmpty()) textList += FormattedLine(statsDesc)
+
+        if (uniqueTo!=null) {
+            textList += FormattedLine()
+            textList += FormattedLine("Unique to [$uniqueTo]", link="Nation/$uniqueTo")
+        }
+
+        if (terrainsCanBeBuiltOn.isNotEmpty()) {
+            textList += FormattedLine()
+            if (terrainsCanBeBuiltOn.size == 1) {
+                with (terrainsCanBeBuiltOn.first()) {
+                    textList += FormattedLine("{Can be built on} {$this}", link="Terrain/$this")
+                }
+            } else {
+                textList += FormattedLine("{Can be built on}:")
+                terrainsCanBeBuiltOn.forEach {
+                    textList += FormattedLine(it, link="Terrain/$it", indent=1)
+                }
+            }
+        }
+
+        val statsToResourceNames = HashMap<String, ArrayList<String>>()
+        for (resource in ruleset.tileResources.values.filter { it.improvement == name }) {
+            val statsString = resource.improvementStats.toString()
+            if (statsString !in statsToResourceNames)
+                statsToResourceNames[statsString] = ArrayList()
+            statsToResourceNames[statsString]!!.add(resource.name)
+        }
+        if (statsToResourceNames.isNotEmpty()) {
+            statsToResourceNames.forEach {
+                textList += FormattedLine()
+                if (it.value.size == 1) {
+                    with(it.value[0]) {
+                        textList += FormattedLine("${it.key}{ for }{$this}", link="Resource/$this")
+                    }
+                } else {
+                    textList += FormattedLine("${it.key}{ for }:")
+                    it.value.forEach { resource ->
+                        textList += FormattedLine(resource, link="Resource/$resource", indent=1)
+                    }
+                }
+            }
+        }
+
+        if (techRequired != null) {
+            textList += FormattedLine()
+            textList += FormattedLine("Required tech: [$techRequired]", link="Technology/$techRequired")
+        }
+
+        if (uniques.isNotEmpty()) {
+            textList += FormattedLine()
+            for(unique in uniques.sorted())
+                textList += FormattedLine(unique)
+        }
+
+        val unitEntry = ruleset.units.asSequence().firstOrNull { "Can construct [$name]" in it.value.uniques }
+        if (unitEntry != null) {
+            textList += FormattedLine()
+            textList += FormattedLine("{Can be constructed by} {${unitEntry.key}}", link="Unit/${unitEntry.key}")
+        }
+
+        return textList
+    }
 }
 

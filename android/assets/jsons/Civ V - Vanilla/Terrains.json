@@ -210,7 +210,11 @@
 		"impassable": true,
 		"unbuildable": true,
 		"uniques": ["Grants Rejuvenation (all healing effects doubled) to adjacent military land units for the rest of the game"],
-		"weight": 1
+		"weight": 1,
+		"civilopediaText": [
+			{"extraImage": "Fountain_of_Youth", "imageSize":120},
+			{"text": "One of the earliest accounts of this legendary spring comes from Herodotus, who describes it as a special \"Water of Life\" giving any who drinks of it exceptionally long life. Similar stories have also been told among the indigenous people of the Caribbean and South America, which brought the Fountain of Youth to prominence during Spain’s era of exploration. According to one popular story, in 1513 the Spanish conquistador Juan Ponce de León heard tales of the fountain during his travels in Puerto Rico, and set sail to search for eternal life. In doing so, he discovered Florida (and became one of the first Europeans to set foot on North American soil). The Fountain of Youth continues to captivate audiences today - movies, books, comics, and games have all featured the fabled spring, and man’s eternal quest to obtain it."}
+		]
 	},
 	{
 		"name": "Grand Mesa",

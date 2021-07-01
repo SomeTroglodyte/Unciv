@@ -37,7 +37,11 @@
 		"cost": 40,
 		"obsoleteTech": "Metal Casting",
 		"upgradesTo": "Swordsman",
-		"attackSound": "nonmetalhit"
+		"attackSound": "nonmetalhit",
+        "civilopediaText": [
+			{"extraImage": "Warrior", "imageSize":120},
+			{"text": "In primitive civilizations there's no such thing as a 'professional soldier.' A young civilization can't afford to support a full-time army; all of the civilization's able-bodied men form an ad hoc militia, coming together during a crisis, dispersing back to their farms and villages during peace. Such warriors usually have very little training and are equipped with the most primitive of weapons - clubs, perhaps, or stone daggers."}
+		]
 	},
 	{
 		"name": "Maori Warrior",
@@ -151,7 +155,7 @@
 		"strength": 10,
 		"cost": 45,
 		"requiredTech": "Sailing",
-		"uniques": ["Cannot enter ocean tiles",],
+		"uniques": ["Cannot enter ocean tiles"],
 		"upgradesTo": "Caravel",
 		"obsoleteTech": "Astronomy",
 		"attackSound": "nonmetalhit"
@@ -1057,7 +1061,7 @@
 		"cost": 375,
 		"requiredResource": "Oil",
 		"requiredTech": "Electronics",
-		"uniques": ["Ranged attacks may be performed over obstacles"],
+		"uniques": ["Ranged attacks may be performed over obstacles"]
 		// Does not actually upgrade to Missile Cruisers
 	},
 	{
