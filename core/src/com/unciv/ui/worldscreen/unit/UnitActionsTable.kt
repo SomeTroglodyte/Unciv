@@ -24,14 +24,10 @@ class UnitActionsTable(val worldScreen: WorldScreen) : Table() {
     private fun getIconAndKeyForUnitAction(unitAction: String): UnitIconAndKey {
         when {
             unitAction.equalsPlaceholderText("Upgrade to [] ([] gold)") -> {
-                // Regexplaination: start with a [, take as many non-] chars as you can, until you reach a ].
-                // What you find between the first [ and the first ] that comes after it, will be group no. 1
                 val unitToUpgradeTo = unitAction.getPlaceholderParameters()[0]
                 return UnitIconAndKey(ImageGetter.getUnitIcon(unitToUpgradeTo), 'u')
             }
             unitAction.equalsPlaceholderText("Create []") -> {
-                // Regexplaination: start with a [, take as many non-] chars as you can, until you reach a ].
-                // What you find between the first [ and the first ] that comes after it, will be group no. 1
                 val improvementName = unitAction.getPlaceholderParameters()[0]
                 return UnitIconAndKey(ImageGetter.getImprovementIcon(improvementName), 'i')
             }
@@ -96,7 +92,7 @@ class UnitActionsTable(val worldScreen: WorldScreen) : Table() {
         else {
             actionButton.onClick(unitAction.uncivSound, action)
             if (iconAndKey.key != Char.MIN_VALUE)
-                worldScreen.keyPressDispatcher[iconAndKey.key] = {
+                worldScreen.keyPressDispatcher[KeyCharAndCode.translate(iconAndKey.key)] = {
                     thread(name = "Sound") { Sounds.play(unitAction.uncivSound) }
                     action()
                 }

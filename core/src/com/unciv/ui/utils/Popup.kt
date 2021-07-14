@@ -105,7 +105,7 @@ open class Popup(val screen: CameraStageBaseScreen): Table(CameraStageBaseScreen
         return add(button)
     }
     fun addButtonInRow(text: String, key: Char, action: () -> Unit)
-        = addButtonInRow(text, KeyCharAndCode(key), action)
+        = addButtonInRow(text, KeyCharAndCode.translate(key), action)
     fun addButtonInRow(text: String, key: Int, action: () -> Unit)
         = addButtonInRow(text, KeyCharAndCode(key), action)
 

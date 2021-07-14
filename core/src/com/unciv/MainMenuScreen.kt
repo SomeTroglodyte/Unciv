@@ -52,7 +52,7 @@ class MainMenuScreen: CameraStageBaseScreen() {
 
         if (key != null) {
             if (!keyVisualOnly)
-                keyPressDispatcher[key] = function
+                keyPressDispatcher[KeyCharAndCode.translate(key)] = function
             table.addStaticTip(key, 32f)
         }
         
@@ -172,7 +172,7 @@ class MainMenuScreen: CameraStageBaseScreen() {
             val newMapButton = screen.getMenuButton("New map", "OtherIcons/New", 'n', true, newMapAction) 
             newMapButton.background = tableBackground
             add(newMapButton).row()
-            keyPressDispatcher['n'] = newMapAction 
+            keyPressDispatcher[KeyCharAndCode.translate('n')] = newMapAction
 
             val loadMapAction = {
                 val loadMapScreen = SaveAndLoadMapScreen(null, false, screen)
@@ -183,7 +183,7 @@ class MainMenuScreen: CameraStageBaseScreen() {
             val loadMapButton = screen.getMenuButton("Load map", "OtherIcons/Load", 'l', true, loadMapAction) 
             loadMapButton.background = tableBackground
             add(loadMapButton).row()
-            keyPressDispatcher['l'] = loadMapAction
+            keyPressDispatcher[KeyCharAndCode.translate('l')] = loadMapAction
 
             add(screen.getMenuButton("Close", "OtherIcons/Close") { close() }
                     .apply { background=tableBackground })

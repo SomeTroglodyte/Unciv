@@ -6,6 +6,9 @@ import com.badlogic.gdx.scenes.scene2d.EventListener
 import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.InputListener
 import com.badlogic.gdx.scenes.scene2d.Stage
+import com.unciv.models.translations.tr
+import java.util.*
+import kotlin.collections.HashMap
 
 /*
  * For now, combination keys cannot easily be expressed.
@@ -20,19 +23,13 @@ import com.badlogic.gdx.scenes.scene2d.Stage
 /**
  * Represents a key for use in an InputListener keyTyped() handler
  *
- * Example: KeyCharAndCode('R'), KeyCharAndCode(Input.Keys.F1)
+ * Example: KeyCharAndCode('R'), KeyCharAndCode(Input.Keys.F1), KeyCharAndCode("ESCAPE")
  */
 data class KeyCharAndCode(val char: Char, val code: Int) {
     // express keys with a Char value
     constructor(char: Char): this(char.toLowerCase(), 0)
     // express keys that only have a keyCode like F1
     constructor(code: Int): this(Char.MIN_VALUE, code)
-    // helper for use in InputListener keyTyped()
-    constructor(event: InputEvent?, character: Char)
-            : this (
-                character.toLowerCase(),
-                if (character == Char.MIN_VALUE && event!=null) event.keyCode else 0
-            )
 
     // From Kotlin 1.5 on the Ctrl- line will need Char(char.code+64)
     // see https://github.com/Kotlin/KEEP/blob/master/proposals/stdlib/char-int-conversions.md
@@ -45,14 +42,59 @@ data class KeyCharAndCode(val char: Char, val code: Int) {
             else -> "\"$char\""
         }
     }
-    
-    // Convenience shortcuts for frequently used constants
+
     companion object {
+        // Convenience shortcuts for frequently used constants
         val BACK = KeyCharAndCode(Input.Keys.BACK)
-        val ESC = KeyCharAndCode('\u001B')
-        val RETURN = KeyCharAndCode('\r')
+        val ESC = KeyCharAndCode(Input.Keys.ESCAPE)
+        val RETURN = KeyCharAndCode(Input.Keys.ENTER)
         val NEWLINE = KeyCharAndCode('\n')
-        val SPACE = KeyCharAndCode(' ')
+        val SPACE = KeyCharAndCode(Input.Keys.SPACE)
+        val INVALID = KeyCharAndCode(0)
+
+        private val translationCache: MutableMap<String,KeyCharAndCode> = mutableMapOf()
+
+        // factory with translation capability plus caching
+        fun translate(keyName: String): KeyCharAndCode {
+            val lookupKey = keyName.toUpperCase(Locale.ROOT)
+            return translationCache[lookupKey] ?: run {
+                val result = translateInternal(lookupKey)
+                translationCache[lookupKey] = result
+                result
+            }
+        }
+        fun translate(keyChar: Char) = translate(keyChar.toString())
+
+        // factory with translation capability
+        private fun translateInternal(keyName: String): KeyCharAndCode {
+            val translatedKey = "Key:$keyName".tr()
+            return when {
+                translatedKey.length == 10 && translatedKey[9].isLetter() && translatedKey.startsWith("Key:Ctrl-", true) ->
+                    ctrl(translatedKey[9])
+                translatedKey.length == 6 && translatedKey[5].isLetter() && translatedKey.startsWith("Ctrl-", true) ->
+                    ctrl(translatedKey[5])
+                translatedKey.startsWith("Key:", true) ->
+                    fromName(translatedKey.drop(4))
+                translatedKey.length == 1 && translatedKey[0] in ' '..Char.MAX_VALUE ->
+                    KeyCharAndCode(translatedKey[0])
+                else -> {
+                    println("KeyCharAndCode.translate: invalid translation \"$keyName\" to \"$translatedKey\"")
+                    INVALID
+                }
+            }
+        }
+
+        // factory using key codes by name
+        private fun fromName(name: String): KeyCharAndCode {
+            val code = Input.Keys.valueOf(name)  // will return -1 if name not found
+            return if (code == -1) {
+                println("KeyCharAndCode.fromName called with invalid name \"$name\"")
+                INVALID
+            } else KeyCharAndCode(code)
+        }
+
+        // mini-factory for control codes - case insensitive
+        fun ctrl(letter: Char) = KeyCharAndCode((letter.toInt() and 31).toChar())
     }
 }
 
@@ -92,8 +134,17 @@ class KeyPressDispatcher(val name: String? = null) : HashMap<KeyCharAndCode, (()
     operator fun contains(code: Int) = this.contains(KeyCharAndCode(code))
     fun remove(code: Int) = this.remove(KeyCharAndCode(code))
 
+    // access by String translatable key names
+    operator fun get(keyName: String) = this[KeyCharAndCode.translate(keyName)]
+    operator fun set(keyName: String, action: () -> Unit) {
+        this[KeyCharAndCode.translate(keyName)] = action
+    }
+    operator fun contains(keyName: String) = this.contains(KeyCharAndCode.translate(keyName))
+    fun remove(keyName: String) = this.remove(KeyCharAndCode.translate(keyName))
+
     // access by KeyCharAndCode
     operator fun set(key: KeyCharAndCode, action: () -> Unit) {
+        if (key == KeyCharAndCode.INVALID) return
         super.put(key, action)
         // On Android the Enter key will fire with Ascii code `Linefeed`, on desktop as `Carriage Return`
         if (key == KeyCharAndCode.RETURN)
@@ -104,6 +155,7 @@ class KeyPressDispatcher(val name: String? = null) : HashMap<KeyCharAndCode, (()
         checkInstall()
     }
     override fun remove(key: KeyCharAndCode): (() -> Unit)? {
+        if (key == KeyCharAndCode.INVALID) return null
         val result = super.remove(key)
         if (key == KeyCharAndCode.RETURN)
             super.remove(KeyCharAndCode.NEWLINE)
@@ -145,7 +197,10 @@ class KeyPressDispatcher(val name: String? = null) : HashMap<KeyCharAndCode, (()
         listener =
             object : InputListener() {
                 override fun keyTyped(event: InputEvent?, character: Char): Boolean {
-                    val key = KeyCharAndCode(event, character)
+                    // look for both key code and ascii entries
+                    val key = if (event != null && event.keyCode > 0 && contains(event.keyCode))
+                        KeyCharAndCode(event.keyCode)
+                        else KeyCharAndCode(character)
 
                     // see if we want to handle this key, and if not, let it propagate
                     if (!contains(key) || (checkIgnoreKeys?.invoke() == true))

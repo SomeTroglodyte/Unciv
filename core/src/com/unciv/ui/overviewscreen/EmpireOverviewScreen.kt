@@ -60,7 +60,7 @@ class EmpireOverviewScreen(private var viewingPlayer:CivilizationInfo, defaultPa
         button.add(name.toLabel(Color.WHITE)).pad(5f)
         if (!disabled && keyboardAvailable && iconAndKey.key != Char.MIN_VALUE) {
             button.addStaticTip(iconAndKey.key)
-            keyPressDispatcher[iconAndKey.key] = setCategoryAction
+            keyPressDispatcher[KeyCharAndCode.translate(iconAndKey.key)] = setCategoryAction
         }
         setCategoryActions[name] = setCategoryAction
         categoryButtons[name] = button

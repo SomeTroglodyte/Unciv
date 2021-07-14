@@ -228,7 +228,7 @@ class WorldScreen(val gameInfo: GameInfo, val viewingCiv:CivilizationInfo) : Cam
 
         // Space and N are assigned in createNextTurnButton
         keyPressDispatcher[Input.Keys.F1] = { game.setScreen(CivilopediaScreen(gameInfo.ruleSet)) }
-        keyPressDispatcher['E'] = { game.setScreen(EmpireOverviewScreen(selectedCiv)) }     // Empire overview last used page
+        keyPressDispatcher[KeyCharAndCode.translate('E')] = { game.setScreen(EmpireOverviewScreen(selectedCiv)) }     // Empire overview last used page
         /*
          * These try to be faithful to default Civ5 key bindings as found in several places online
          * Some are a little arbitrary, e.g. Economic info, Military info
@@ -250,11 +250,11 @@ class WorldScreen(val gameInfo: GameInfo, val viewingCiv:CivilizationInfo) : Cam
             if (!mapHolder.setCenterPosition(capital.location))
                 game.setScreen(CityScreen(capital))
         }
-        keyPressDispatcher['\u000F'] = { this.openOptionsPopup() }    //   Ctrl-O: Game Options
-        keyPressDispatcher['\u0013'] = { game.setScreen(SaveGameScreen(gameInfo)) }    //   Ctrl-S: Save
-        keyPressDispatcher['\u000C'] = { game.setScreen(LoadGameScreen(this)) }    //   Ctrl-L: Load
-        keyPressDispatcher['+'] = { this.mapHolder.zoomIn() }    //   '+' Zoom - Input.Keys.NUMPAD_ADD would need dispatcher patch
-        keyPressDispatcher['-'] = { this.mapHolder.zoomOut() }    //   '-' Zoom
+        keyPressDispatcher[KeyCharAndCode.translate("Ctrl-O")] = { this.openOptionsPopup() }    //   Game Options
+        keyPressDispatcher[KeyCharAndCode.translate("Ctrl-S")] = { game.setScreen(SaveGameScreen(gameInfo)) }    //   Save
+        keyPressDispatcher[KeyCharAndCode.translate("Ctrl-L")] = { game.setScreen(LoadGameScreen(this)) }    //   Load
+        keyPressDispatcher[Input.Keys.NUMPAD_ADD] = { this.mapHolder.zoomIn() }    //   NumPad '+' Zoom
+        keyPressDispatcher[Input.Keys.NUMPAD_SUBTRACT] = { this.mapHolder.zoomOut() }    //   NumPad '-' Zoom
         keyPressDispatcher.setCheckpoint()
     }
 
@@ -555,8 +555,8 @@ class WorldScreen(val gameInfo: GameInfo, val viewingCiv:CivilizationInfo) : Cam
         nextTurnButton.labelCell.pad(10f)
         val nextTurnActionWrapped = { nextTurnAction() }
         nextTurnButton.onClick(nextTurnActionWrapped)
-        keyPressDispatcher[' '] = nextTurnActionWrapped
-        keyPressDispatcher['n'] = nextTurnActionWrapped
+        keyPressDispatcher[KeyCharAndCode.SPACE] = nextTurnActionWrapped
+        keyPressDispatcher[KeyCharAndCode.translate('n')] = nextTurnActionWrapped
 
         return nextTurnButton
     }

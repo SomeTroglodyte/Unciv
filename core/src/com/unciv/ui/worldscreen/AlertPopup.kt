@@ -93,7 +93,7 @@ class AlertPopup(val worldScreen: WorldScreen, val popupAlert: PopupAlert): Popu
                     }        
                     val liberateText = "Liberate (city returns to [originalOwner])".fillPlaceholders(city.foundingCiv)
                     add(liberateText.toTextButton().onClick(function = liberateAction)).row()
-                    keyPressDispatcher['l'] = liberateAction
+                    keyPressDispatcher[KeyCharAndCode.translate('l')] = liberateAction
                     addGoodSizedLabel("Liberating a city returns it to its original owner, giving you a massive relationship boost with them!")
                     addSeparator()
                 }
@@ -106,7 +106,7 @@ class AlertPopup(val worldScreen: WorldScreen, val popupAlert: PopupAlert): Popu
                         close()
                     }
                     add("Destroy".toTextButton().onClick(function = destroyAction)).row()
-                    keyPressDispatcher['d'] = destroyAction
+                    keyPressDispatcher[KeyCharAndCode.translate('d')] = destroyAction
                     addGoodSizedLabel("Destroying the city instantly razes the city to the ground.").row()
                 } else {
                     val annexAction = {
@@ -116,7 +116,7 @@ class AlertPopup(val worldScreen: WorldScreen, val popupAlert: PopupAlert): Popu
                         close()
                     }
                     add("Annex".toTextButton().onClick(function = annexAction)).row()
-                    keyPressDispatcher['a'] = annexAction
+                    keyPressDispatcher[KeyCharAndCode.translate('a')] = annexAction
                     addGoodSizedLabel("Annexed cities become part of your regular empire.").row()
                     addGoodSizedLabel("Their citizens generate 2x the unhappiness, unless you build a courthouse.").row()
                     addSeparator()
@@ -127,7 +127,7 @@ class AlertPopup(val worldScreen: WorldScreen, val popupAlert: PopupAlert): Popu
                         close()
                     }
                     add("Puppet".toTextButton().onClick(function = puppetAction) ).row()
-                    keyPressDispatcher['p'] = puppetAction
+                    keyPressDispatcher[KeyCharAndCode.translate('p')] = puppetAction
                     addGoodSizedLabel("Puppeted cities do not increase your tech or policy cost, but their citizens generate 1.5x the regular unhappiness.").row()
                     addGoodSizedLabel("You have no control over the the production of puppeted cities.").row()
                     addGoodSizedLabel("Puppeted cities also generate 25% less Gold and Science.").row()

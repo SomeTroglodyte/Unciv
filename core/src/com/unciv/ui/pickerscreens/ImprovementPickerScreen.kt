@@ -129,7 +129,7 @@ class ImprovementPickerScreen(val tileInfo: TileInfo, unit: MapUnit, val onAccep
             regularImprovements.add(improvementButton)
 
             if (shortcutKey != null) {
-                keyPressDispatcher[shortcutKey] = { accept(improvement) }
+                keyPressDispatcher[KeyCharAndCode.translate(shortcutKey)] = { accept(improvement) }
                 improvementButton.addStaticTip(shortcutKey)
             }
 
