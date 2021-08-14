@@ -5,12 +5,12 @@ name: Build and deploy
 # Controls when the action will run. 
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
-  push:
-    tags:
-      - '*' # This doesn't mean that it HAS to have a tag, only that the workflow triggers when we push a tag
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  #push:
+  #  tags:
+  #    - '*' # This doesn't mean that it HAS to have a tag, only that the workflow triggers when we push a tag
+  #  branches: [ master ]
+  #pull_request:
+  #  branches: [ master ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
     # On push events only, if it's a "Update X" commit, it's probably something done through the UI - 
     #  so an .md or yaml change, and not something we need to rebuild over
     # We can't simply put !startsWith - see https://github.community/t/expression-syntax-for-not-startswith/17040
-    if: github.event_name != 'push' || startsWith(github.event.commits[0].message, 'Update ') != true
+    # if: github.event_name != 'push' || startsWith(github.event.commits[0].message, 'Update ') != true
     runs-on: ubuntu-latest
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-java@v1
         with:
-          java-version: '8'
+          java-version: '11'
 
       # Runs a set of commands using the runners shell
       - name: check
