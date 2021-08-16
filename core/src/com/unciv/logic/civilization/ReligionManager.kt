@@ -30,7 +30,7 @@ class ReligionManager {
     var religionState = ReligionState.None
         private set
 
-    var foundingCityId: String? = null
+    private var foundingCityId: String? = null
     // Only used for keeping track of the city a prophet was used when founding a religion
 
     fun clone(): ReligionManager {
