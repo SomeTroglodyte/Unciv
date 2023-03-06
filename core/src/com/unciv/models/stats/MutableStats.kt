@@ -12,22 +12,15 @@ import kotlin.reflect.KMutableProperty0
  * Also possible: `<Stats>`.[values].sum() and similar aggregates over a Sequence<Float>.
  */
 class MutableStats(
-    production: Float = 0f,
-    food: Float = 0f,
-    gold: Float = 0f,
-    science: Float = 0f,
-    culture: Float = 0f,
-    happiness: Float = 0f,
-    faith: Float = 0f
-) : Stats(production, food, gold, science, culture, happiness, faith) {
-    override var production: Float = 0f
-    override var food: Float = 0f
-    override var gold: Float = 0f
-    override var science: Float = 0f
-    override var culture: Float = 0f
-    override var happiness: Float = 0f
+    // These overrides regrettably do not actually replace the Stat val's, their storage is separate
+    override var production: Float = 0f,
+    override var food: Float = 0f,
+    override var gold: Float = 0f,
+    override var science: Float = 0f,
+    override var culture: Float = 0f,
+    override var happiness: Float = 0f,
     override var faith: Float = 0f
-
+) : Stats() {
     /** Conversion constructor: immutable to mutable */
     // private for better readability, use `from` factory instead
     private constructor(s: Stats) : this(s.production, s.food, s.gold, s.science, s.culture, s.happiness, s.faith)

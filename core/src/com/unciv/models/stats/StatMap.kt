@@ -20,7 +20,9 @@ class StatMap : LinkedHashMap<String, Stats>() {
     }
 
     fun applyPercentBonus(stats: Stats, vararg statFilter: Stat) {
+        if (statFilter.none { stats[it] != 0f }) return // optimize - all percentages zero
         for ((source, entry) in this) {
+            if (statFilter.none { entry[it] != 0f }) continue // optimize - all values zero
             if (entry is MutableStats) entry.applyPercentBonus(stats, *statFilter)
             else this[source] = MutableStats.from(entry).applyPercentBonus(stats, *statFilter)
         }
