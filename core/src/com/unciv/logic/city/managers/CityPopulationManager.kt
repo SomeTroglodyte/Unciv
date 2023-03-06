@@ -139,7 +139,11 @@ class CityPopulationManager : IsPartOfGameInfoSerialization {
 
     internal fun autoAssignPopulation() {
         city.cityStats.update()  // calculate current stats with current assignments
-        val cityStats = city.cityStats.currentCityStats
+
+        //TODO - highly suspect. This modifies the existing city.cityStats.currentCityStats
+        // directly, but the city.cityStats.update() at the end would overwrite it???
+        val cityStats = city.cityStats.currentCityStats.toMutable()
+
         city.currentGPPBonus = city.getGreatPersonPercentageBonus()  // pre-calculate
         var specialistFoodBonus = 2f  // See CityStats.calcFoodEaten()
         for (unique in city.getMatchingUniques(UniqueType.FoodConsumptionBySpecialists))

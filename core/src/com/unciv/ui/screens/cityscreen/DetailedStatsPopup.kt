@@ -5,9 +5,8 @@ import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.utils.Align
-import com.unciv.logic.city.StatTreeNode
 import com.unciv.models.stats.Stat
-import com.unciv.models.stats.Stats
+import com.unciv.models.stats.StatTreeNode
 import com.unciv.models.translations.tr
 import com.unciv.ui.images.IconCircleGroup
 import com.unciv.ui.popups.Popup
@@ -22,7 +21,7 @@ import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toLabel
 import java.text.DecimalFormat
 
-class DetailedStatsPopup(val cityScreen: CityScreen, stageToShowOn: Stage) : Popup(
+class DetailedStatsPopup(private val cityScreen: CityScreen, stageToShowOn: Stage) : Popup(
     stageToShowOn = stageToShowOn,
     scrollable = false) {
 
@@ -56,7 +55,7 @@ class DetailedStatsPopup(val cityScreen: CityScreen, stageToShowOn: Stage) : Pop
         val cityStats = cityScreen.city.cityStats
         val showFaith = cityScreen.city.civ.gameInfo.isReligionEnabled()
 
-        val stats = when {
+        val statsToDisplay = when {
             onlyWithStat != null -> listOfNotNull(onlyWithStat)
             !showFaith -> Stat.values().filter { it != Stat.Faith }
             else -> Stat.values().toList()
@@ -68,7 +67,7 @@ class DetailedStatsPopup(val cityScreen: CityScreen, stageToShowOn: Stage) : Pop
             isDetailed = !isDetailed
             update() }).minWidth(150f).grow()
 
-        for (stat in stats) {
+        for (stat in statsToDisplay) {
             val label = stat.name.toLabel()
             label.onClick {
                 onlyWithStat = if (onlyWithStat == null) stat else null
@@ -83,34 +82,29 @@ class DetailedStatsPopup(val cityScreen: CityScreen, stageToShowOn: Stage) : Pop
         totalTable.add("Base values".toLabel().apply { setAlignment(Align.center) })
             .colspan(totalTable.columns).padLeft(0f).padRight(0f).growX().row()
         totalTable.addSeparator().padTop(2f)
-        traverseTree(totalTable, stats, cityStats.baseStatTree, mergeHappiness = true, percentage = false)
+        traverseTree(totalTable, statsToDisplay, cityStats.baseStatTree, mergeHappiness = true, percentage = false)
 
         totalTable.addSeparator().padBottom(2f)
         totalTable.add("Bonuses".toLabel().apply { setAlignment(Align.center) })
             .colspan(totalTable.columns).padLeft(0f).padRight(0f).growX().row()
         totalTable.addSeparator().padTop(2f)
-        traverseTree(totalTable, stats, cityStats.statPercentBonusTree, percentage = true)
+        traverseTree(totalTable, statsToDisplay, cityStats.statPercentBonusTree, percentage = true)
 
         totalTable.addSeparator().padBottom(2f)
         totalTable.add("Final".toLabel().apply { setAlignment(Align.center) })
             .colspan(totalTable.columns).padLeft(0f).padRight(0f).growX().row()
         totalTable.addSeparator().padTop(2f)
 
-        val final = LinkedHashMap<Stat, Float>()
-        val map = cityStats.finalStatList.toSortedMap()
-
+        //val final = LinkedHashMap<Stat, Float>()
+        val statMapWithHappiness = cityStats.finalStatList.clone()
         for ((key, value) in cityScreen.city.cityStats.happinessList) {
-            if (!map.containsKey(key)) {
-                map[key] = Stats()
-                map[key]!![Stat.Happiness] = value
-            } else if (map[key]!![Stat.Happiness] == 0f) {
-                map[key]!![Stat.Happiness] = value
-            }
+            statMapWithHappiness.replaceSpecificStat(key, Stat.Happiness, value)
         }
+        val map = statMapWithHappiness.toSortedMap()
 
         for ((source, finalStats) in map) {
 
-            if (finalStats.all { it.value == 0f })
+            if (finalStats.isEmpty())
                 continue
 
             if (onlyWithStat != null && finalStats[onlyWithStat!!] == 0f)
@@ -131,28 +125,21 @@ class DetailedStatsPopup(val cityScreen: CityScreen, stageToShowOn: Stage) : Pop
 
             totalTable.add(wrapInTable(label, color, Align.left)).grow()
 
-            for (stat in stats) {
-                val value = finalStats[stat]
-                val cell = when (value) {
+            for (stat in statsToDisplay) {
+                val cell = when (val value = finalStats[stat]) {
                     0f -> "-".toLabel()
                     else -> value.toOneDecimalLabel()
                 }
 
                 totalTable.add(wrapInTable(cell, color)).grow()
-
-                var f = final[stat]
-                if (f == null)
-                    f = 0f
-                f += value
-                final[stat] = f
-
             }
             totalTable.row()
         }
 
+        val final = statMapWithHappiness.totalStats
         totalTable.add(wrapInTable("Total".toLabel(), colorTotal)).grow()
-        for (stat in stats) {
-            totalTable.add(wrapInTable(final[stat]?.toOneDecimalLabel(), colorTotal)).grow()
+        for (stat in statsToDisplay) {
+            totalTable.add(wrapInTable(final[stat].toOneDecimalLabel(), colorTotal)).grow()
         }
         totalTable.row()
     }
@@ -270,4 +257,3 @@ class DetailedStatsPopup(val cityScreen: CityScreen, stageToShowOn: Stage) : Pop
                 DecimalFormat("0.#").format(this).toLabel()
     }
 }
-

@@ -22,7 +22,7 @@ import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.ruleset.unit.UnitType
-import com.unciv.models.stats.Stats
+import com.unciv.models.stats.MutableStats
 import com.unciv.ui.components.extensions.filterAndLogic
 import java.text.DecimalFormat
 import kotlin.math.pow
@@ -563,15 +563,15 @@ class MapUnit : IsPartOfGameInfoSerialization {
     private fun addStatsPerGreatPersonUsage() {
         if (!isGreatPerson()) return
 
-        val gainedStats = Stats()
+        val gainedStats = MutableStats()
         for (unique in civ.getMatchingUniques(UniqueType.ProvidesGoldWheneverGreatPersonExpended)) {
             gainedStats.gold += (100 * civ.gameInfo.speed.goldCostModifier).toInt()
         }
         for (unique in civ.getMatchingUniques(UniqueType.ProvidesStatsWheneverGreatPersonExpended)) {
-            val uniqueStats = unique.stats
+            val uniqueStats = MutableStats.from(unique.stats)
             val speedModifiers = civ.gameInfo.speed.statCostModifiers
-            for (stat in uniqueStats) {
-                uniqueStats[stat.key] = stat.value * speedModifiers[stat.key]!!
+            for ((stat, value) in uniqueStats) {
+                uniqueStats[stat] = value * speedModifiers[stat]!!
             }
             gainedStats.add(uniqueStats)
         }

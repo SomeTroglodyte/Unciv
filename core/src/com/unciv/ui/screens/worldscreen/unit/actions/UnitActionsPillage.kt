@@ -1,7 +1,6 @@
 package com.unciv.ui.screens.worldscreen.unit.actions
 
 import com.unciv.GUI
-import com.unciv.UncivGame
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.map.mapunit.MapUnit
@@ -9,12 +8,12 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitAction
 import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
-import com.unciv.models.stats.Stats
 import com.unciv.ui.popups.ConfirmPopup
 import com.unciv.ui.popups.hasOpenPopups
-import com.unciv.ui.screens.worldscreen.WorldScreen
 import kotlin.random.Random
+
 
 object UnitActionsPillage {
 
@@ -77,9 +76,9 @@ object UnitActionsPillage {
 
     private fun pillageLooting(tile: Tile, unit: MapUnit) {
         // Stats objects for reporting pillage results in a notification
-        val pillageYield = Stats()
-        val globalPillageYield = Stats()
-        val toCityPillageYield = Stats()
+        val pillageYield = MutableStats()
+        val globalPillageYield = MutableStats()
+        val toCityPillageYield = MutableStats()
         val closestCity = unit.civ.cities.minByOrNull { it.getCenterTile().aerialDistanceTo(tile) }
         val improvement = tile.getImprovementToPillage()!!
 

@@ -34,7 +34,7 @@ class GlobalUniquesTests {
 
         cityInfo.cityConstructions.addBuilding(buildingName)
         cityInfo.cityStats.update()
-        Assert.assertTrue(cityInfo.cityStats.finalStatList["Buildings"]!!.equals(Stats(food=1f)))
+        Assert.assertTrue(cityInfo.cityStats.finalStatList["Buildings"]!! == Stats(food=1f))
     }
 
 
@@ -42,7 +42,7 @@ class GlobalUniquesTests {
     fun statsNotOnBuilding() {
         val civInfo = game.addCiv("[+2 Gold]")
         civInfo.updateStatsForNextTurn()
-        Assert.assertTrue(civInfo.stats.statsForNextTurn.equals(Stats(gold=2f)))
+        Assert.assertTrue(civInfo.stats.statsForNextTurn == Stats(gold=2f))
     }
 
     @Test
@@ -62,7 +62,7 @@ class GlobalUniquesTests {
 
         cityInfo.cityConstructions.addBuilding(buildingName)
         cityInfo.cityStats.update()
-        Assert.assertTrue(cityInfo.cityStats.finalStatList["Buildings"]!!.equals(Stats(production=1f)))
+        Assert.assertTrue(cityInfo.cityStats.finalStatList["Buildings"]!! == Stats(production=1f))
     }
 
     @Test
@@ -77,7 +77,7 @@ class GlobalUniquesTests {
 
         cityInfo.cityConstructions.addBuilding(building.name)
         cityInfo.cityStats.update()
-        Assert.assertTrue(cityInfo.cityStats.finalStatList["Specialists"]!!.equals(Stats(gold=6f)))
+        Assert.assertTrue(cityInfo.cityStats.finalStatList["Specialists"]!! == Stats(gold=6f))
     }
 
     @Test
@@ -311,8 +311,7 @@ class GlobalUniquesTests {
             )
         val tile = game.setTileFeatures(Vector2(0f,0f), Constants.desert)
         val city = game.addCity(civInfo, tile, true)
-        val faithBuilding = game.createBuilding()
-        faithBuilding.faith = 3f
+        val faithBuilding = game.createBuildingWithStats("{faith:3}")
         city.cityConstructions.addBuilding(faithBuilding.name)
 
         val tile2 = game.setTileFeatures(Vector2(0f,1f), Constants.grassland)
@@ -336,8 +335,7 @@ class GlobalUniquesTests {
             )
         val tile = game.setTileFeatures(Vector2(0f,0f), Constants.desert)
         val city = game.addCity(civInfo, tile, true)
-        val faithBuilding = game.createBuilding()
-        faithBuilding.faith = 3f
+        val faithBuilding = game.createBuildingWithStats("{faith:3}")
         city.cityConstructions.addBuilding(faithBuilding.name)
 
         val tile2 = game.setTileFeatures(Vector2(0f,1f), Constants.grassland)

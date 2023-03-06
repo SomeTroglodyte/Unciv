@@ -1,7 +1,6 @@
 package com.unciv.logic.city
 
 import com.unciv.Constants
-import com.unciv.UncivGame
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.Building
@@ -13,96 +12,59 @@ import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.StatMap
+import com.unciv.models.stats.StatTreeNode
 import com.unciv.models.stats.Stats
 import com.unciv.ui.components.extensions.toPercent
 import com.unciv.utils.DebugUtils
 import kotlin.math.min
 
 
-class StatTreeNode {
-    val children = LinkedHashMap<String, StatTreeNode>()
-    private var innerStats: Stats? = null
-
-    fun setInnerStat(stat: Stat, value: Float) {
-        if (innerStats == null) innerStats = Stats()
-        innerStats!![stat] = value
-    }
-
-    private fun addInnerStats(stats: Stats) {
-        if (innerStats == null) innerStats = stats.clone() // Copy the stats instead of referencing them
-        else innerStats!!.add(stats) // What happens if we add 2 stats to the same leaf?
-    }
-
-    fun addStats(newStats: Stats, vararg hierarchyList: String) {
-        if (hierarchyList.isEmpty()) {
-            addInnerStats(newStats)
-            return
-        }
-        val childName = hierarchyList.first()
-        if (!children.containsKey(childName))
-            children[childName] = StatTreeNode()
-        children[childName]!!.addStats(newStats, *hierarchyList.drop(1).toTypedArray())
-    }
-
-    fun add(otherTree: StatTreeNode) {
-        if (otherTree.innerStats != null) addInnerStats(otherTree.innerStats!!)
-        for ((key, value) in otherTree.children) {
-            if (!children.containsKey(key)) children[key] = value
-            else children[key]!!.add(value)
-        }
-    }
-
-    fun clone() : StatTreeNode {
-        val new = StatTreeNode()
-        new.innerStats = this.innerStats?.clone()
-        new.children.putAll(this.children)
-        return new
-    }
-
-    val totalStats: Stats
-        get() {
-            val toReturn = Stats()
-            if (innerStats != null) toReturn.add(innerStats!!)
-            for (child in children.values) toReturn.add(child.totalStats)
-            return toReturn
-        }
-}
-
 /** Holds and calculates [Stats] for a city.
  *
  * No field needs to be saved, all are calculated on the fly,
  * so its field in [City] is @Transient and no such annotation is needed here.
+ *
+ *
+ * Parameter _`copyTileStats`_ is a special for [CityConstructions.turnsToConstruction], if `true`
+ * it creates an instance keeping [statsFromTiles] from the [city]'s existing `cityStats`.
+ * Used in conjunction with [update]`(updateTileStats = false)`
  */
-class CityStats(val city: City) {
+class CityStats(val city: City, copyTileStats: Boolean = false) {
     //region Fields, Transient
 
     var baseStatTree = StatTreeNode()
+        private set
 
     var statPercentBonusTree = StatTreeNode()
+        private set
 
     // Computed from baseStatList and statPercentBonusList - this is so the players can see a breakdown
-    var finalStatList = LinkedHashMap<String, Stats>()
+    var finalStatList = StatMap()
+        private set
 
     var happinessList = LinkedHashMap<String, Float>()
+        private set
 
-    var statsFromTiles = Stats()
+    private var statsFromTiles: Stats = if (copyTileStats) city.cityStats.statsFromTiles else Stats()
 
     var currentCityStats: Stats = Stats()  // This is so we won't have to calculate this multiple times - takes a lot of time, especially on phones
+        private set
 
     //endregion
     //region Pure Functions
 
 
     private fun getStatsFromTradeRoute(): Stats {
-        val stats = Stats()
+        val stats = MutableStats()
         if (!city.isCapital() && city.isConnectedToCapital()) {
             val civInfo = city.civ
             stats.gold = civInfo.getCapital()!!.population.population * 0.15f + city.population.population * 1.1f - 1 // Calculated by http://civilization.wikia.com/wiki/Trade_route_(Civ5)
             for (unique in city.getMatchingUniques(UniqueType.StatsFromTradeRoute))
                 stats.add(unique.stats)
-            val percentageStats = Stats()
+            val percentageStats = MutableStats()
             for (unique in city.getMatchingUniques(UniqueType.StatPercentFromTradeRoutes))
                 percentageStats[Stat.valueOf(unique.params[1])] += unique.params[0].toFloat()
             for ((stat) in stats) {
@@ -113,7 +75,7 @@ class CityStats(val city: City) {
     }
 
     private fun getStatsFromProduction(production: Float): Stats {
-        val stats = Stats()
+        val stats = MutableStats()
 
         if (city.cityConstructions.currentConstructionFromQueue in Stat.statsWithCivWideField.map { it.name }) {
             val stat = Stat.valueOf(city.cityConstructions.currentConstructionFromQueue)
@@ -132,9 +94,9 @@ class CityStats(val city: City) {
     }
 
     private fun getStatPercentBonusesFromRailroad(): Stats {
-        val stats = Stats()
+        val stats = MutableStats()
         val railroadImprovement = RoadStatus.Railroad.improvement(city.getRuleset())
-            ?: return stats // for mods
+            ?: return Stats.ZERO // for mods
         val techEnablingRailroad = railroadImprovement.techRequired
         // If we conquered enemy cities connected by railroad, but we don't yet have that tech,
         // we shouldn't get bonuses, it's as if the tracks are laid out but we can't operate them.
@@ -150,14 +112,8 @@ class CityStats(val city: City) {
             statPercentBonusTree.addStats(building.getStatPercentageBonuses(city, localUniqueCache), "Buildings", building.name)
     }
 
-    private fun getStatPercentBonusesFromPuppetCity(): Stats {
-        val stats = Stats()
-        if (city.isPuppet) {
-            stats.science -= 25f
-            stats.culture -= 25f
-        }
-        return stats
-    }
+    private fun getStatPercentBonusesFromPuppetCity() =
+            if (city.isPuppet) Stats(science = -25f, culture = -25f) else Stats.ZERO
 
     private fun getGrowthBonus(totalFood: Float): StatMap {
         val growthSources = StatMap()
@@ -181,8 +137,8 @@ class CityStats(val city: City) {
 
     fun getStatsOfSpecialist(specialistName: String): Stats {
         val specialist = city.getRuleset().specialists[specialistName]
-            ?: return Stats()
-        val stats = specialist.cloneStats()
+            ?: return Stats.ZERO
+        val stats = specialist.cloneMutableStats()
         for (unique in city.getMatchingUniques(UniqueType.StatsFromSpecialist))
             if (city.matchesFilter(unique.params[1]))
                 stats.add(unique.stats)
@@ -193,7 +149,7 @@ class CityStats(val city: City) {
     }
 
     private fun getStatsFromSpecialists(specialists: Counter<String>): Stats {
-        val stats = Stats()
+        val stats = MutableStats()
         for (entry in specialists.filter { it.value > 0 })
             stats.add(getStatsOfSpecialist(entry.key) * entry.value)
         return stats
@@ -205,8 +161,8 @@ class CityStats(val city: City) {
 
         val cityStateStatsMultipliers = city.civ.getMatchingUniques(UniqueType.BonusStatsFromCityStates).toList()
 
-        fun addUniqueStats(unique:Unique) {
-            val stats = unique.stats.clone()
+        fun addUniqueStats(unique: Unique) {
+            val stats = MutableStats.from(unique.stats)
             if (unique.sourceObjectType==UniqueTarget.CityState)
                 for (multiplierUnique in cityStateStatsMultipliers)
                     stats[Stat.valueOf(multiplierUnique.params[1])] *= multiplierUnique.params[0].toPercent()
@@ -245,20 +201,14 @@ class CityStats(val city: City) {
         }
     }
 
-    private fun getStatPercentBonusesFromGoldenAge(isGoldenAge: Boolean): Stats {
-        val stats = Stats()
-        if (isGoldenAge) {
-            stats.production += 20f
-            stats.culture += 20f
-        }
-        return stats
-    }
+    private fun getStatPercentBonusesFromGoldenAge(isGoldenAge: Boolean)
+            = if (isGoldenAge) Stats(production = 20f, culture = 20f) else Stats.ZERO
 
     private fun getStatsPercentBonusesFromUniquesBySource(currentConstruction: IConstruction): StatTreeNode {
         val sourceToStats = StatTreeNode()
 
         fun addUniqueStats(unique:Unique, stat:Stat, amount:Float) {
-            sourceToStats.addStats(Stats().add(stat, amount), getSourceNameForUnique(unique), unique.sourceObjectName ?: "")
+            sourceToStats.addStats(Stats.from(stat, amount), getSourceNameForUnique(unique), unique.sourceObjectName ?: "")
         }
 
         for (unique in city.getMatchingUniques(UniqueType.StatPercentBonus)) {
@@ -310,11 +260,9 @@ class CityStats(val city: City) {
     }
 
     private fun getStatPercentBonusesFromUnitSupply(): Stats {
-        val stats = Stats()
         val supplyDeficit = city.civ.stats.getUnitSupplyDeficit()
-        if (supplyDeficit > 0)
-            stats.production = city.civ.stats.getUnitSupplyProductionPenalty()
-        return stats
+        val production = if (supplyDeficit > 0) city.civ.stats.getUnitSupplyProductionPenalty() else 0f
+        return Stats(production = production)
     }
 
     private fun constructionMatchesFilter(construction: IConstruction, filter: String): Boolean {
@@ -353,7 +301,7 @@ class CityStats(val city: City) {
     //region State-Changing Methods
 
     fun updateTileStats() {
-        val stats = Stats()
+        val stats = MutableStats()
         val localUniqueCache = LocalUniqueCache()
         val workedTiles = city.tilesInRange.asSequence()
             .filter {
@@ -466,7 +414,7 @@ class CityStats(val city: City) {
         newStatsBonusTree.add(getStatsPercentBonusesFromUniquesBySource(currentConstruction))
 
         if (DebugUtils.SUPERCHARGED) {
-            val stats = Stats()
+            val stats = MutableStats()
             for (stat in Stat.values()) stats[stat] = 10000f
             newStatsBonusTree.addStats(stats, "Supercharged")
         }
@@ -487,9 +435,7 @@ class CityStats(val city: City) {
 
         updateFinalStatList(currentConstruction) // again, we don't edit the existing currentCityStats directly, in order to avoid concurrency exceptions
 
-        val newCurrentCityStats = Stats()
-        for (stat in finalStatList.values) newCurrentCityStats.add(stat)
-        currentCityStats = newCurrentCityStats
+        currentCityStats = finalStatList.totalStats
 
         city.civ.updateStatsForNextTurn()
     }
@@ -502,8 +448,7 @@ class CityStats(val city: City) {
 
         val statPercentBonusesSum = statPercentBonusTree.totalStats
 
-        for (entry in newFinalStatList.values)
-            entry.production *= statPercentBonusesSum.production.toPercent()
+        newFinalStatList.applyPercentBonus(statPercentBonusesSum, Stat.Production)
 
         // We only add the 'extra stats from production' AFTER we calculate the production INCLUDING BONUSES
         val statsFromProduction = getStatsFromProduction(newFinalStatList.values.map { it.production }.sum())
@@ -515,12 +460,7 @@ class CityStats(val city: City) {
             newFinalStatList["Construction"] = statsFromProduction
         }
 
-        for (entry in newFinalStatList.values) {
-            entry.gold *= statPercentBonusesSum.gold.toPercent()
-            entry.culture *= statPercentBonusesSum.culture.toPercent()
-            entry.food *= statPercentBonusesSum.food.toPercent()
-            entry.faith *= statPercentBonusesSum.faith.toPercent()
-        }
+        newFinalStatList.applyPercentBonus(statPercentBonusesSum, Stat.Gold, Stat.Culture, Stat.Food, Stat.Faith)
 
         // AFTER we've gotten all the gold stats figured out, only THEN do we plonk that gold into Science
         if (city.getRuleset().modOptions.uniques.contains(ModOptionsConstants.convertGoldToScience)) {
@@ -529,9 +469,7 @@ class CityStats(val city: City) {
             if (amountConverted > 0) // Don't want you converting negative gold to negative science yaknow
                 newFinalStatList["Gold -> Science"] = Stats(science = amountConverted, gold = -amountConverted)
         }
-        for (entry in newFinalStatList.values) {
-            entry.science *= statPercentBonusesSum.science.toPercent()
-        }
+        newFinalStatList.applyPercentBonus(statPercentBonusesSum, Stat.Science)
 
         for ((unique, statToBeRemoved) in city.getMatchingUniques(UniqueType.NullifiesStat)
             .map { it to Stat.valueOf(it.params[0]) }
@@ -541,7 +479,7 @@ class CityStats(val city: City) {
 
             newFinalStatList.add(
                 getSourceNameForUnique(unique),
-                Stats().apply { this[statToBeRemoved] = -removedAmount.toFloat() }
+                Stats.from(statToBeRemoved, -removedAmount.toFloat())
             )
         }
 
@@ -552,8 +490,7 @@ class CityStats(val city: City) {
         Now we have the excess food, to which "growth" modifiers apply
         Some policies have bonuses for growth only, not general food production. */
 
-        val foodEaten = calcFoodEaten()
-        newFinalStatList["Population"]!!.food -= foodEaten
+        newFinalStatList.add("Population", Stats(food = -calcFoodEaten()))
 
         var totalFood = newFinalStatList.values.map { it.food }.sum()
 
@@ -592,7 +529,7 @@ class CityStats(val city: City) {
             val amountToRemove = -newFinalStatList.values.sumOf { it[Stat.Food].toDouble() }
             newFinalStatList.add(
                 getSourceNameForUnique(growthNullifyingUnique),
-                Stats().apply { this[Stat.Food] = amountToRemove.toFloat() }
+                Stats(food = amountToRemove.toFloat())
             )
         }
 

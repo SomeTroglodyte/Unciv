@@ -19,7 +19,7 @@ class YieldGroup : HorizontalGroup() {
     var currentStats = Stats()
 
     fun setStats(stats: Stats) {
-        if (currentStats.equals(stats)) return // don't need to update - this is a memory and time saver!
+        if (currentStats == stats) return // don't need to update - this is a memory and time saver!
         currentStats = stats
         clearChildren()
         for ((stat, amount) in stats) {

@@ -3,6 +3,7 @@ package com.unciv.uniques
 import com.badlogic.gdx.math.Vector2
 import com.unciv.Constants
 import com.unciv.UncivGame
+import com.unciv.json.json
 import com.unciv.logic.GameInfo
 import com.unciv.logic.city.City
 import com.unciv.logic.city.managers.CityFounder
@@ -196,6 +197,8 @@ class TestGame {
         createRulesetObject(ruleset.beliefs, *uniques) { Belief(type) }
     fun createBuilding(vararg uniques: String) =
         createRulesetObject(ruleset.buildings, *uniques) { Building() }
+    fun createBuildingWithStats(statsJson: String, vararg uniques: String) =
+            createRulesetObject(ruleset.buildings, *uniques) { json().fromJson(Building::class.java, statsJson) }
     fun createPolicy(vararg uniques: String) =
         createRulesetObject(ruleset.policies, *uniques) { Policy() }
     fun createTileImprovement(vararg uniques: String) =

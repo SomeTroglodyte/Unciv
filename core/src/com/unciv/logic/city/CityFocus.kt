@@ -1,6 +1,7 @@
 package com.unciv.logic.city
 
 import com.unciv.logic.IsPartOfGameInfoSerialization
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 
@@ -36,7 +37,7 @@ enum class CityFocus(val label: String, val tableEnabled: Boolean, val stat: Sta
         else -> 1f
     }
 
-    fun applyWeightTo(stats: Stats) {
+    fun applyWeightTo(stats: MutableStats) {
         for (stat in Stat.values()) {
             stats[stat] *= getStatMultiplier(stat)
         }

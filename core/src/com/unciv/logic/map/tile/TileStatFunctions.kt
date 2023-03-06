@@ -7,6 +7,7 @@ import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.LocalUniqueCache
 import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.ui.components.extensions.toPercent
@@ -18,7 +19,7 @@ class TileStatFunctions(val tile: Tile) {
     fun getTileStats(city: City?, observingCiv: Civilization?,
                      localUniqueCache: LocalUniqueCache = LocalUniqueCache(false)
     ): Stats {
-        var stats = tile.getBaseTerrain().cloneStats()
+        var stats = tile.getBaseTerrain().cloneMutableStats()
 
         val stateForConditionals = StateForConditionals(civInfo = observingCiv, city = city, tile = tile)
 
@@ -26,13 +27,13 @@ class TileStatFunctions(val tile: Tile) {
             when {
                 terrainFeatureBase.hasUnique(UniqueType.NullifyYields) ->
                     return terrainFeatureBase.cloneStats()
-                terrainFeatureBase.overrideStats -> stats = terrainFeatureBase.cloneStats()
+                terrainFeatureBase.overrideStats -> stats = terrainFeatureBase.cloneMutableStats()
                 else -> stats.add(terrainFeatureBase)
             }
         }
 
         if (tile.naturalWonder != null) {
-            val wonderStats = tile.getNaturalWonder().cloneStats()
+            val wonderStats = tile.getNaturalWonder().cloneMutableStats()
 
             if (tile.getNaturalWonder().overrideStats)
                 stats = wonderStats
@@ -95,7 +96,7 @@ class TileStatFunctions(val tile: Tile) {
     // Only gets the tile percentage bonus, not the improvement percentage bonus
     @Suppress("MemberVisibilityCanBePrivate")
     fun getTilePercentageStats(observingCiv: Civilization?, city: City?): Stats {
-        val stats = Stats()
+        val stats = MutableStats()
         val stateForConditionals = StateForConditionals(civInfo = observingCiv, city = city, tile = tile)
 
         if (city != null) {
@@ -156,11 +157,11 @@ class TileStatFunctions(val tile: Tile) {
     }
 
     private fun getTileStartYield(isCenter: Boolean): Float {
-        var stats = tile.getBaseTerrain().cloneStats()
+        var stats = tile.getBaseTerrain().cloneMutableStats()
 
         for (terrainFeatureBase in tile.terrainFeatureObjects) {
             if (terrainFeatureBase.overrideStats)
-                stats = terrainFeatureBase.cloneStats()
+                stats = terrainFeatureBase.cloneMutableStats()
             else
                 stats.add(terrainFeatureBase)
         }
@@ -183,7 +184,7 @@ class TileStatFunctions(val tile: Tile) {
         city: City?,
         cityUniqueCache: LocalUniqueCache = LocalUniqueCache(false)
     ): Stats {
-        val stats = improvement.cloneStats()
+        val stats = improvement.cloneMutableStats()
         if (tile.hasViewableResource(observingCiv) && tile.tileResource.isImprovedBy(improvement.name)
                 && tile.tileResource.improvementStats != null
         )
@@ -218,7 +219,7 @@ class TileStatFunctions(val tile: Tile) {
         conditionalState: StateForConditionals,
         cityUniqueCache: LocalUniqueCache
     ): Stats {
-        val stats = Stats()
+        val stats = MutableStats()
 
         fun statsFromTiles(){
             // Since the conditionalState contains the current tile, it is different for each tile,
@@ -264,7 +265,7 @@ class TileStatFunctions(val tile: Tile) {
         city: City?,
         cityUniqueCache: LocalUniqueCache
     ): Stats {
-        val stats = Stats()
+        val stats = MutableStats()
         val conditionalState = StateForConditionals(civInfo = observingCiv, city = city, tile = tile)
 
         // I would love to make an interface 'canCallMatchingUniques'

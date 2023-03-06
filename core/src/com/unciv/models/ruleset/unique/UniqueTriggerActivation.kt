@@ -386,7 +386,7 @@ object UniqueTriggerActivation {
                 ) return false
 
                 val statAmount = unique.params[0].toInt()
-                val stats = Stats().add(stat, statAmount.toFloat())
+                val stats = Stats.from(stat, statAmount.toFloat())
                 civInfo.addStats(stats)
 
                 val filledNotification = if(notification!=null && notification.hasPlaceholderParameters())
@@ -411,7 +411,7 @@ object UniqueTriggerActivation {
                 val finalStatAmount = (tileBasedRandom.nextInt(unique.params[0].toInt(), unique.params[1].toInt()) *
                                 civInfo.gameInfo.speed.statCostModifiers[stat]!!).roundToInt()
 
-                val stats = Stats().add(stat, finalStatAmount.toFloat())
+                val stats = Stats.from(stat, finalStatAmount.toFloat())
                 civInfo.addStats(stats)
 
                 val filledNotification = if (notification!=null && notification.hasPlaceholderParameters())

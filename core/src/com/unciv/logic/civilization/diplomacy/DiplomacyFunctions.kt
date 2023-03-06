@@ -9,6 +9,7 @@ import com.unciv.logic.civilization.PopupAlert
 import com.unciv.logic.map.tile.Tile
 import com.unciv.logic.map.mapunit.UnitMovementAlgorithms
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
@@ -53,7 +54,7 @@ class DiplomacyFunctions(val civInfo:Civilization){
 
             val cityStateLocation = if (civInfo.cities.isEmpty()) null else civInfo.getCapital()!!.location
 
-            val giftAmount = Stats(gold = 15f)
+            val giftAmount = MutableStats(gold = 15f)
             val faithAmount = Stats(faith = 4f)
             // Later, religious city-states will also gift gold, making this the better implementation
             // For now, it might be overkill though.

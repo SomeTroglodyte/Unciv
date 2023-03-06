@@ -161,7 +161,7 @@ class ImprovementPickerScreen(
                 currentPlayerCiv,
                 tile.getCity(),
                 cityUniqueCache
-            )
+            ).toMutable()
             // subtract the benefits of the replaced improvement, if any
             val existingImprovement = tile.getTileImprovement()
             if (existingImprovement != null && removeImprovement) {

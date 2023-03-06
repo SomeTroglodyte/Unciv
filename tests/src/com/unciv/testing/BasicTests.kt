@@ -83,7 +83,7 @@ class BasicTests {
         Assert.assertFalse(Stats.isStats("+1 Gold from tree"))
 
         val statsThatShouldBe = Stats(gold = 1f, production = 2f)
-        Assert.assertTrue(Stats.parse("+1 Gold, +2 Production").equals(statsThatShouldBe))
+        Assert.assertTrue(Stats.parse("+1 Gold, +2 Production") == statsThatShouldBe)
 
         UncivGame.Current = UncivGame()
         UncivGame.Current.settings = GameSettings().apply { language = "Italian" }
@@ -320,7 +320,7 @@ class BasicTests {
         )
         // This is dependent on iterator order, so when that changes the expected values must change too
         val stats = statMathRunner(iterations)
-        Assert.assertTrue(stats.equals(expectedStats))
+        Assert.assertTrue(stats == expectedStats)
     }
 
     private fun statMathRunner(iterations: Int): Stats {

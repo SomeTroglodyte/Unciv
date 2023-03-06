@@ -15,6 +15,7 @@ import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.LocalUniqueCache
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.ui.screens.victoryscreen.RankingType
@@ -42,7 +43,7 @@ object Automation {
 
     private fun rankStatsForCityWork(stats: Stats, city: City, cityStats: Stats, specialist: Boolean = false): Float {
         val cityAIFocus = city.cityAIFocus
-        val yieldStats = stats.clone()
+        val yieldStats = MutableStats.from(stats)
 
         if (specialist) {
             // If you have the Food Bonus, count as 1 extra food production (base is 2food)

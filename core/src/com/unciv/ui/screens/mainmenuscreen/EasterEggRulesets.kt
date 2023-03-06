@@ -1,5 +1,6 @@
 package com.unciv.ui.screens.mainmenuscreen
 
+import com.unciv.json.json
 import com.unciv.logic.HolidayDates
 import com.unciv.logic.HolidayDates.Holidays
 import com.unciv.logic.map.MapParameters
@@ -63,11 +64,11 @@ object EasterEggRulesets {
         set(terrain.name, terrain)
     }
 
-    private fun getWonder() = Terrain().apply {
+    private fun mockTerrain(happiness: Int, food: Int, faith: Int): Terrain =
+        json().fromJson(Terrain::class.java, "{happiness:$happiness,food:$food,faith:$faith}")
+
+    private fun getWonder() = mockTerrain(42, 9, 9).apply {
         type = TerrainType.NaturalWonder
-        happiness = 42f
-        food = 9f
-        faith = 9f
         occursOn.addAll(listOf("Grassland", "Plains", "Desert"))
         uniques.add("Must be adjacent to [0] [Coast] tiles")
         turnsInto = "Mountain"
@@ -76,11 +77,8 @@ object EasterEggRulesets {
         weight = 999999
     }
 
-    private fun getRareFeature() = Terrain().apply {
+    private fun getRareFeature() = mockTerrain(2, 1, 1).apply {
         type = TerrainType.TerrainFeature
-        happiness = 2f
-        food = 1f
-        faith = 1f
         occursOn.addAll(listOf("Grassland", "Plains", "Desert", "Tundra", "Snow"))
         uniques.add("Rare feature")
     }

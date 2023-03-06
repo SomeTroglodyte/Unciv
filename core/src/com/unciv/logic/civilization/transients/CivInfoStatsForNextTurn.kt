@@ -10,6 +10,7 @@ import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.StatMap
 import com.unciv.models.stats.Stats
@@ -83,7 +84,7 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
     }
 
     private fun getTransportationUpkeep(): Stats {
-        val transportationUpkeep = Stats()
+        val transportationUpkeep = MutableStats()
         // we no longer use .flatMap, because there are a lot of tiles and keeping them all in a list
         // just to go over them once is a waste of memory - there are low-end phones who don't have much ram
 
@@ -175,13 +176,9 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
                         .relationshipLevel() != RelationshipLevel.Ally
             ) continue
             for (unique in civInfo.getMatchingUniques(UniqueType.CityStateStatPercent)) {
-                statMap.add(
-                    Constants.cityStates,
-                    Stats().add(
-                        Stat.valueOf(unique.params[0]),
-                        otherCiv.stats.statsForNextTurn[Stat.valueOf(unique.params[0])] * unique.params[1].toFloat() / 100f
-                    )
-                )
+                val stat = Stat.valueOf(unique.params[0])
+                val amount = otherCiv.stats.statsForNextTurn[stat] * unique.params[1].toFloat() / 100f
+                statMap.add(Constants.cityStates, Stats.from(stat, amount))
             }
         }
 
@@ -190,7 +187,7 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
 
 
         if (civInfo.getHappiness() > 0) {
-            val excessHappinessConversion = Stats()
+            val excessHappinessConversion = MutableStats()
             for (unique in civInfo.getMatchingUniques(UniqueType.ExcessHappinessToGlobalStat)) {
                 excessHappinessConversion.add(Stat.valueOf(unique.params[1]), (unique.params[0].toFloat() / 100f * civInfo.getHappiness()))
             }
@@ -314,18 +311,18 @@ class CivInfoStatsForNextTurn(val civInfo: Civilization) {
             if (unique.sourceObjectType != UniqueTarget.Building && unique.sourceObjectType != UniqueTarget.Wonder)
                 statMap.add(unique.sourceObjectType!!.name, unique.stats)
 
-        val statsPerNaturalWonder = Stats(happiness = 1f)
+        val statsPerNaturalWonder = MutableStats(happiness = 1f)
 
         for (unique in civInfo.getMatchingUniques(UniqueType.StatsFromNaturalWonders))
             statsPerNaturalWonder.add(unique.stats)
 
-        statMap.add("Natural Wonders", statsPerNaturalWonder.times(civInfo.naturalWonders.size))
+        statMap.add("Natural Wonders", statsPerNaturalWonder * civInfo.naturalWonders.size)
 
         if (statMap.contains(UniqueTarget.CityState.name)) {
             for (unique in civInfo.getMatchingUniques(UniqueType.BonusStatsFromCityStates)) {
-                val bonusPercent = unique.params[0].toPercent()
+                val bonusPercent = unique.params[0].toFloat()
                 val bonusStat = Stat.valueOf(unique.params[1])
-                statMap[UniqueTarget.CityState.name]!![bonusStat] *= bonusPercent
+                statMap.applyPercentBonus(Stats.from(bonusStat, bonusPercent), bonusStat)
             }
         }
 

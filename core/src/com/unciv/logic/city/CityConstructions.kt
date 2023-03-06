@@ -20,6 +20,7 @@ import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
+import com.unciv.models.stats.StatTreeNode
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
 import com.unciv.ui.screens.civilopediascreen.CivilopediaCategories
@@ -261,10 +262,9 @@ class CityConstructions : IsPartOfGameInfoSerialization {
               we get all sorts of fun concurrency problems when accessing various parts of the cityStats.
             SO, we create an entirely new CityStats and iterate there - problem solve!
             */
-            val cityStats = CityStats(city)
-            cityStats.statsFromTiles = city.cityStats.statsFromTiles // take as-is
+            val cityStats = CityStats(city, copyTileStats = true)
             val construction = city.cityConstructions.getConstruction(constructionName)
-            cityStats.update(construction, false)
+            cityStats.update(construction, updateTileStats = false)
             cityStatsForConstruction = cityStats.currentCityStats
         }
 
