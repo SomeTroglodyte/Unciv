@@ -7,19 +7,19 @@ class StatTreeNode {
     val children = LinkedHashMap<String, StatTreeNode>()
     private var innerStats: Stats? = null
 
-    fun setInnerStat(stat: Stat, value: Float) {
+    fun addInnerStat(stat: Stat, value: Float) {
         when (innerStats) {
-            null -> innerStats = MutableStats.from(stat, value)
+            null -> innerStats = Stats.from(stat, value)
             is MutableStats -> (innerStats as MutableStats).add(stat, value)
-            else -> innerStats = MutableStats.from(innerStats!!).add(stat, value)
+            else -> innerStats = innerStats!!.toMutable().add(stat, value)
         }
     }
 
     private fun addInnerStats(stats: Stats) {
         when (innerStats) {
-            null -> innerStats = stats
+            null -> innerStats = stats.toImmutable()
             is MutableStats -> (innerStats as MutableStats).add(stats)
-            else -> innerStats = MutableStats.from(innerStats!!).add(stats)
+            else -> innerStats = innerStats!!.toMutable().add(stats)
         }
         // What happens if we add 2 stats to the same leaf? A: accumulates
     }

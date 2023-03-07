@@ -168,9 +168,9 @@ class DetailedStatsPopup(private val cityScreen: CityScreen, stageToShowOn: Stag
             for ((key, value) in cityScreen.city.cityStats.happinessList) {
                 if (!map.containsKey(key)) {
                     map[key] = StatTreeNode()
-                    map[key]?.setInnerStat(Stat.Happiness, value)
+                    map[key]?.addInnerStat(Stat.Happiness, value)
                 } else if (map[key]!!.totalStats.happiness == 0f) {
-                    map[key]?.setInnerStat(Stat.Happiness, value)
+                    map[key]?.addInnerStat(Stat.Happiness, value)
                 }
             }
         }
@@ -179,7 +179,7 @@ class DetailedStatsPopup(private val cityScreen: CityScreen, stageToShowOn: Stag
 
             val text = "- ".repeat(indentation) + name.tr()
 
-            if (child.totalStats.all { it.value == 0f }) {
+            if (child.totalStats.isEmpty()) {
                 table.row()
                 continue
             }
@@ -208,7 +208,7 @@ class DetailedStatsPopup(private val cityScreen: CityScreen, stageToShowOn: Stag
                 val value = child.totalStats[stat]
                 val cell = when {
                     value == 0f -> "-".toLabel()
-                    percentage ->  value.toPercentLabel()
+                    percentage -> value.toPercentLabel()
                     else -> value.toOneDecimalLabel()
                 }
 

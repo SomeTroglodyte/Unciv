@@ -105,6 +105,7 @@ class MutableStats(
     }
 
     override fun toMutable() = this
+    override fun toImmutable() = clone()
 
     companion object {
         /** Factory creates a [MutableStats] instance with one [stat] preset to [amount] */

@@ -13,9 +13,9 @@ class StatMap : LinkedHashMap<String, Stats>() {
 
     fun add(source: String, stats: Stats) {
         when (val existing = this[source]) {
-            null -> this[source] = stats
+            null -> this[source] = stats.toImmutable()
             is MutableStats -> existing.add(stats)
-            else -> this[source] = MutableStats.from(existing).add(stats)
+            else -> this[source] = existing.toMutable().add(stats)
         }
     }
 

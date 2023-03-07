@@ -153,6 +153,8 @@ open class Stats(
 
     /** Returns a mutable clone or _`this`_ if the instance is already a [MutableStats] */
     open fun toMutable() = MutableStats.from(this)
+    /** Returns an immutable clone or _`this`_ if the instance is already an immutable [Stats] */
+    open fun toImmutable() = this
 
     companion object {
         private val allStatNames = Stat.values().joinToString("|") { it.name }

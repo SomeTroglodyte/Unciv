@@ -13,6 +13,7 @@ import com.unciv.models.ruleset.unique.Unique
 import com.unciv.models.ruleset.unique.UniqueParameterType
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
+import com.unciv.models.stats.MutableStats
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.models.translations.getPlaceholderParameters
@@ -326,14 +327,14 @@ class BasicTests {
     private fun statMathRunner(iterations: Int): Stats {
         val random = Random(42)
         val statCount = Stat.values().size
-        val stats = Stats()
+        val stats = MutableStats()
 
         for (i in 0 until iterations) {
             val value: Float = random.nextDouble(-10.0, 10.0).toFloat()
             stats.add( Stats(gold = value) )
-            stats.forEach {
-                val stat = Stat.values()[(it.key.ordinal + random.nextInt(1,statCount)).rem(statCount)]
-                stats.add(stat, -it.value)
+            for ((stat, value) in stats) {
+                val nextStat = Stat.values()[(stat.ordinal + random.nextInt(1,statCount)).rem(statCount)]
+                stats.add(nextStat, -value)
             }
             val stat = Stat.values()[random.nextInt(statCount)]
             stats.add(stat, stats.times(4)[stat])
