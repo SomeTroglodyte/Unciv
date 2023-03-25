@@ -60,14 +60,15 @@ class Translations : LinkedHashMap<String, TranslationEntry>(){
                     return translationEntry
             }
 
-        return this[text]
+        return this[text] ?: Apertium.getNewEntry(text, language)
     }
 
     /**
      * @see get
      */
     fun getText(text: String, language: String, activeMods: HashSet<String>? = null): String {
-        return get(text, language, activeMods)?.get(language) ?: text
+        val entry = get(text, language, activeMods) ?: return text
+        return entry[language] ?: Apertium.addToEntry(entry, text, language)
     }
 
     /** Get all languages present in `this`, used for [TranslationFileWriter] and `TranslationTests` */

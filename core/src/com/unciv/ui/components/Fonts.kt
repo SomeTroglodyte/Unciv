@@ -53,7 +53,7 @@ class FontFamilyData(
     override fun hashCode() = invariantName.hashCode()
 
     /** For SelectBox usage */
-    override fun toString() = localName.tr()
+    override fun toString() = localName
 
     companion object {
         val default = FontFamilyData("Default Font", Fonts.DEFAULT_FONT_FAMILY)

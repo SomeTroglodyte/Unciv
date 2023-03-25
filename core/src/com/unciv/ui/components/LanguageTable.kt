@@ -4,6 +4,7 @@ import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.unciv.Constants
 import com.unciv.UncivGame
+import com.unciv.models.translations.Apertium
 import com.unciv.ui.screens.civilopediascreen.FormattedLine
 import com.unciv.ui.screens.civilopediascreen.MarkupRenderer
 import com.unciv.ui.images.ImageGetter
@@ -26,7 +27,8 @@ internal class LanguageTable(val language:String, val percentComplete: Int): Tab
             add(ImageGetter.getImage("FlagIcons/$language")).size(40f)
 
         val spaceSplitLang = language.replace("_"," ")
-        add("$spaceSplitLang ($percentComplete%)".toLabel())
+        val percent = if (language.endsWith(Apertium.suffix)) "?" else percentComplete.toString()
+        add("$spaceSplitLang ($percent%)".toLabel())
         update("")
         touchable =
             Touchable.enabled // so click listener is activated when any part is clicked, not only children
@@ -63,6 +65,10 @@ internal class LanguageTable(val language:String, val percentComplete: Int): Tab
 
             val languageCompletionPercentage = UncivGame.Current.translations
                 .percentCompleteOfLanguages
+                .toMutableMap().apply {
+                    set("Spanish_(Apertium)", 100)
+                    set("Esperanto_(Apertium)", 100)
+                }
             languageTables.addAll(languageCompletionPercentage
                 .map { LanguageTable(it.key, if (it.key == Constants.english) 100 else it.value) }
                 .sortedWith { p0, p1 ->
