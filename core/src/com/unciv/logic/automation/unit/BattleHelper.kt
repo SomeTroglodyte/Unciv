@@ -74,25 +74,16 @@ object BattleHelper {
                 // Since military units can technically enter tiles with enemy civilians,
                 // some try to move to to the tile and then attack the unit it contains, which is silly
                 if (tile == reachableTile) continue
-                if (tile in tilesWithEnemies) attackableTiles += AttackableTile(
-                    reachableTile,
-                    tile,
-                    movementLeft,
-                    Battle.getMapCombatantOfTile(tile)
-                )
-                else if (tile in tilesWithoutEnemies) continue // avoid checking the same empty tile multiple times
+                if (tile in tilesWithEnemies)
+                    attackableTiles += AttackableTile(reachableTile, tile, movementLeft)
+                else if (tile in tilesWithoutEnemies)
+                    continue // avoid checking the same empty tile multiple times
                 else if (tileContainsAttackableEnemy(unit, tile, tilesToCheck)) {
                     tilesWithEnemies += tile
-                    attackableTiles += AttackableTile(
-                        reachableTile, tile, movementLeft,
-                        Battle.getMapCombatantOfTile(tile)
-                    )
+                    attackableTiles += AttackableTile(reachableTile, tile, movementLeft)
                 } else if (unit.isPreparingAirSweep()) {
                     tilesWithEnemies += tile
-                    attackableTiles += AttackableTile(
-                        reachableTile, tile, movementLeft,
-                        Battle.getMapCombatantOfTile(tile)
-                    )
+                    attackableTiles += AttackableTile(reachableTile, tile, movementLeft)
                 } else tilesWithoutEnemies += tile
             }
         }
