@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.utils.Align
 import com.unciv.logic.automation.unit.AttackableTile
 import com.unciv.logic.automation.unit.BattleHelper
 import com.unciv.logic.automation.unit.UnitAutomation
@@ -12,12 +13,12 @@ import com.unciv.logic.battle.BattleDamage
 import com.unciv.logic.battle.CityCombatant
 import com.unciv.logic.battle.ICombatant
 import com.unciv.logic.battle.MapUnitCombatant
+import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UncivSound
 import com.unciv.models.ruleset.unique.UniqueType
-import com.unciv.models.translations.tr
 import com.unciv.ui.audio.SoundPlayer
-import com.unciv.ui.components.Fonts
+import com.unciv.ui.components.ColorMarkupLabel
 import com.unciv.ui.components.extensions.addBorderAllowOpacity
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.disable
@@ -26,7 +27,9 @@ import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.extensions.toTextButton
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.ui.screens.worldscreen.bottombar.BattleTableHelpers.addAttackerModifiers
 import com.unciv.ui.screens.worldscreen.bottombar.BattleTableHelpers.battleAnimation
+import com.unciv.ui.screens.worldscreen.bottombar.BattleTableHelpers.getCombatantHeader
 import com.unciv.ui.screens.worldscreen.bottombar.BattleTableHelpers.getCombatantIcon
 import com.unciv.ui.screens.worldscreen.bottombar.BattleTableHelpers.getHealthBar
 import com.unciv.ui.screens.worldscreen.bottombar.BattleTableHelpers.simulateBattleUI
@@ -185,56 +188,90 @@ class BattleTable(val worldScreen: WorldScreen): Table() {
         worldScreen.battleAnimation(attacker, damageToAttacker, defender, damageToDefender)
     }
 
+    private fun getRelation(attacker: MapUnitCombatant, victim: ICombatant): RelationshipLevel {
+        val attackerCiv = attacker.getCivInfo()
+        val victimCiv = victim.getCivInfo()
+        return when {
+            attackerCiv == victimCiv -> RelationshipLevel.Ally
+            attackerCiv.isAtWarWith(victimCiv) -> RelationshipLevel.Enemy
+            victimCiv.isCityState() && victimCiv.getAllyCiv() == attackerCiv.civName ->
+                RelationshipLevel.Ally
+            else -> RelationshipLevel.Neutral
+        }
+    }
 
     private fun simulateNuke(attacker: MapUnitCombatant, targetTile: Tile) {
         clear()
-
-        val attackerNameWrapper = Table()
-        val attackerLabel = attacker.getName().toLabel(hideIcons = true)
-        attackerNameWrapper.add(getCombatantIcon(attacker)).padRight(5f)
-        attackerNameWrapper.add(attackerLabel)
-        add(attackerNameWrapper)
-
-        val canNuke = Battle.mayUseNuke(attacker, targetTile)
 
         val blastRadius = attacker.unit.getMatchingUniques(UniqueType.BlastRadius)
             .firstOrNull()?.run { params[0].toInt() }
             ?: 2
 
-        val defenderNameWrapper = Table()
-        for (tile in targetTile.getTilesInDistance(blastRadius)) {
-            val defender = tryGetDefenderAtTile(tile, true) ?: continue
+        data class VictimInfo(val combatant: ICombatant, val relation: RelationshipLevel)
+        val victims =
+            targetTile.getTilesInDistance(blastRadius)
+            .mapNotNull { tryGetDefenderAtTile(it, true) }
+            .map { VictimInfo(it, getRelation(attacker, it)) }
+            .sortedWith(
+                compareBy<VictimInfo> { it.combatant is MapUnitCombatant }
+                .thenBy { it.relation }
+                .thenBy { it.combatant.getName() }
+            ).toList()
 
-            val defenderLabel = defender.getName().toLabel(hideIcons = true)
-            defenderNameWrapper.add(getCombatantIcon(defender)).padRight(5f)
-            defenderNameWrapper.add(defenderLabel).row()
+        val victimsByRelation = victims.groupBy { it.relation }
+        val allyVictims = victimsByRelation[RelationshipLevel.Ally]?.size ?: 0
+        val neutralVictims = victimsByRelation[RelationshipLevel.Neutral]?.size ?: 0
+        val enemyVictims = victimsByRelation[RelationshipLevel.Enemy]?.size ?: 0
+        val victimCount = allyVictims + neutralVictims + enemyVictims
+
+        val onRightSet: Set<RelationshipLevel> = when {
+            victimCount < 4 -> setOf()
+            victimsByRelation.size <= 1 -> setOf()
+            allyVictims >= enemyVictims + neutralVictims -> setOf(RelationshipLevel.Neutral, RelationshipLevel.Enemy)
+            neutralVictims >= allyVictims + enemyVictims -> setOf(RelationshipLevel.Neutral)
+            else -> setOf(RelationshipLevel.Enemy)
         }
-        add(defenderNameWrapper).row()
+        val forceBreak = if (victimCount < 8) Int.MAX_VALUE else (victimCount + 1) / 2
 
-        addSeparator().pad(0f)
-        row().pad(5f)
-
-        val attackButton = "NUKE".toTextButton().apply { color = Color.RED }
-
-        val canReach = attacker.unit.currentTile.getTilesInDistance(attacker.unit.getRange()).contains(targetTile)
-
-        if (!worldScreen.isPlayersTurn || !attacker.canAttack() || !canReach || !canNuke) {
-            attackButton.disable()
-            attackButton.label.color = Color.GRAY
-        }
-        else {
-            attackButton.onClick(attacker.getAttackSound()) {
-                Battle.NUKE(attacker, targetTile)
-                worldScreen.mapHolder.removeUnitActionOverlay() // the overlay was one of attacking
-                worldScreen.shouldUpdate = true
+        val leftWrapper = Table()
+        val rightWrapper = Table()
+        fun getVictimLabel(victim: ICombatant, relation: RelationshipLevel): Label {
+            val color = when(relation) {
+                RelationshipLevel.Ally -> Color.YELLOW
+                RelationshipLevel.Neutral -> Color.ORANGE
+                else -> Color.WHITE
             }
+            return victim.getName().toLabel(color, alignment = Align.center, hideIcons = true)
+        }
+        for ((victim, relation) in victims) {
+            val table = if (relation in onRightSet || leftWrapper.rows >= forceBreak)
+                rightWrapper else leftWrapper
+            table.add(getCombatantIcon(victim)).padRight(5f).padBottom(3f)
+            table.add(getVictimLabel(victim, relation)).fillX().row()
         }
 
-        add(attackButton).colspan(2)
+        val minWidth = leftWrapper.prefWidth.coerceAtLeast(rightWrapper.prefWidth)
+        val colSpan = if (rightWrapper.rows == 0) 1 else 2
+        val attackerWrapper = getCombatantHeader(attacker, 0f)
 
-        pack()
+        add(attackerWrapper).colspan(colSpan).fillX().center().row()
+        add(leftWrapper).top().minWidth(minWidth)
+        if (colSpan == 2) add(rightWrapper).top().minWidth(minWidth)
+        row()
 
-        setPosition(worldScreen.stage.width / 2 - width / 2, 5f)
+        val summary = "You will hit [$victimCount] victims: [$enemyVictims] enemies, «ORANGE»[$neutralVictims] innocent bystanders«» and «YELLOW»[$allyVictims] allies«»."
+        val summaryLabel = ColorMarkupLabel(summary, 14)
+        summaryLabel.wrap = true
+        summaryLabel.setAlignment(Align.center)
+        val summaryWidth = 200f
+            .coerceAtLeast(attackerWrapper.prefWidth)
+            .coerceAtLeast(colSpan * minWidth)
+        add(summaryLabel).maxWidth(summaryWidth).colspan(colSpan).center().padTop(8f)
+
+        val canNuke = Battle.mayUseNuke(attacker, targetTile)
+        addAttackButtonAndPosition("NUKE", attacker, targetTile, canNuke) {
+            Battle.NUKE(attacker, targetTile)
+        }
     }
 
     //TODO quarterScreen / getModifierTable are only used in simulateAirsweep -
@@ -304,11 +341,33 @@ class BattleTable(val worldScreen: WorldScreen): Table() {
                 worldScreen.shouldUpdate = true
             }
         }
+    }
 
-        add(attackButton).colspan(2)
+    private fun addAttackButtonAndPosition(
+        text: String,
+        attacker: MapUnitCombatant,
+        targetTile: Tile,
+        canNuke: Boolean,
+        action: () -> Unit
+    ) {
+        addSeparator(Color.GRAY, height = 1f).pad(8f,0f,8f,0f)
 
+        val attackButton = text.toTextButton().apply { color = Color.RED }
+
+        val canReach = attacker.getTile().aerialDistanceTo(targetTile) <= attacker.unit.getRange()
+        if (worldScreen.isPlayersTurn && attacker.canAttack() && canReach && canNuke) {
+            attackButton.onClick(attacker.getAttackSound()) {
+                action()
+                worldScreen.mapHolder.removeUnitActionOverlay() // the overlay was one of attacking
+                worldScreen.shouldUpdate = true
+            }
+        } else {
+            attackButton.disable()
+            attackButton.label.color = Color.GRAY
+        }
+
+        add(attackButton).colspan(columns)
         pack()
-
         setPosition(worldScreen.stage.width / 2 - width / 2, 5f)
     }
 }
