@@ -274,72 +274,22 @@ class BattleTable(val worldScreen: WorldScreen): Table() {
         }
     }
 
-    //TODO quarterScreen / getModifierTable are only used in simulateAirsweep -
-    //      merge airsweep into simulateBattleUI
-    private val quarterScreen = worldScreen.stage.width / 5
-
-    private fun getModifierTable(key: String, value: Int) = Table().apply {
-        val description = if (key.startsWith("vs "))
-            ("vs [" + key.drop(3) + "]").tr()
-        else key.tr()
-        val percentage = (if (value > 0) "+" else "") + value + "%"
-        val upOrDownLabel = if (value > 0f) "⬆".toLabel(Color.GREEN)
-        else "⬇".toLabel(Color.RED)
-
-        add(upOrDownLabel)
-        val modifierLabel = "$percentage $description".toLabel(fontSize = 14).apply { wrap = true }
-        add(modifierLabel).width(quarterScreen - upOrDownLabel.minWidth)
-    }
-
     private fun simulateAirsweep(attacker: MapUnitCombatant, targetTile: Tile) {
         clear()
+        val modifiers = BattleDamage.getAirSweepAttackModifiers(attacker)
+        val attackerStrength = attacker.getAttackingStrength() *
+            (1f + modifiers.sumValues() / 100f)
+        val attackerWrapper = getCombatantHeader(attacker, attackerStrength)
+        val expectedWidth = defaultColumnWidth
+            .coerceAtLeast(attackerWrapper.prefWidth) - 55f  // 55 is roughly "+33%" width
+        val health = attacker.getHealth()
+        attackerWrapper.add(getHealthBar(attacker.getMaxHealth(), health, health, health, false))
+            .colspan(3).height(10f).padBottom(10f).growX().row()
+        attackerWrapper.addAttackerModifiers(attacker, expectedWidth, modifiers)
+        add(attackerWrapper).row()
 
-        val attackerNameWrapper = Table()
-        val attackerLabel = attacker.getName().toLabel(hideIcons = true)
-        attackerNameWrapper.add(getCombatantIcon(attacker)).padRight(5f)
-        attackerNameWrapper.add(attackerLabel)
-        add(attackerNameWrapper)
-
-        val canAttack = attacker.canAttack()
-
-        val defenderLabel = Label("???", skin)
-        add(defenderLabel).row()
-
-        addSeparator().pad(0f)
-
-        val attackIcon = Fonts.rangedStrength
-        add(attacker.getAttackingStrength().toString() + attackIcon)
-        add("???$attackIcon").row()
-
-        val attackerModifiers =
-                BattleDamage.getAirSweepAttackModifiers(attacker).map {
-                    getModifierTable(it.key, it.value)
-                }
-
-        for (modifier in attackerModifiers) {
-            add(modifier)
-            add().width(quarterScreen)
-            row().pad(2f)
-        }
-
-        add(getHealthBar(attacker.getMaxHealth(), attacker.getHealth(), attacker.getHealth(),attacker.getHealth()))
-        add(getHealthBar(attacker.getMaxHealth(), attacker.getMaxHealth(), attacker.getMaxHealth(), attacker.getMaxHealth()))
-        row().pad(5f)
-
-        val attackButton = "Air Sweep".toTextButton().apply { color = Color.RED }
-
-        val canReach = attacker.unit.currentTile.getTilesInDistance(attacker.unit.getRange()).contains(targetTile)
-
-        if (!worldScreen.isPlayersTurn || !attacker.canAttack() || !canReach || !canAttack) {
-            attackButton.disable()
-            attackButton.label.color = Color.GRAY
-        }
-        else {
-            attackButton.onClick(attacker.getAttackSound()) {
-                Battle.airSweep(attacker, targetTile)
-                worldScreen.mapHolder.removeUnitActionOverlay() // the overlay was one of attacking
-                worldScreen.shouldUpdate = true
-            }
+        addAttackButtonAndPosition("Air Sweep", attacker, targetTile, true) {
+            Battle.airSweep(attacker, targetTile)
         }
     }
 
