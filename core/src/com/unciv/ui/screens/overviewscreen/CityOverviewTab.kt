@@ -16,8 +16,7 @@ class CityOverviewTab(
     persistedData: EmpireOverviewTabPersistableData? = null
 ) : EmpireOverviewTab(viewingPlayer, overviewScreen) {
     class CityTabPersistableData(
-        override var sortedBy: CityOverviewTabColumn = CityOverviewTabColumn.CityColumn,
-
+        override var sortedBy: CityOverviewTabColumn = CityOverviewTabColumn.CityColumn
     ) : EmpireOverviewTabPersistableData(), SortableGrid.ISortState<CityOverviewTabColumn> {
         override fun isEmpty() = sortedBy == CityOverviewTabColumn.CityColumn
         override var direction = SortableGrid.SortDirection.None
@@ -33,6 +32,8 @@ class CityOverviewTab(
         iconSize = 50f,  //if you set this too low, there is a chance that the tables will be misaligned
         paddingVert = 5f,
         paddingHorz = 8f,
+
+
         separateHeader = true
     ) {
         header, details, totals ->
@@ -43,6 +44,7 @@ class CityOverviewTab(
     override fun getFixedContent() = grid.getHeader()
 
     init {
+        top()
         add(grid)
     }
 }
