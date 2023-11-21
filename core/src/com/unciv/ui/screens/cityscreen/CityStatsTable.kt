@@ -10,17 +10,14 @@ import com.unciv.Constants
 import com.unciv.UncivGame
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFlags
-import com.unciv.logic.city.CityFocus
 import com.unciv.models.Counter
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.UniqueType
-import com.unciv.models.stats.Stat
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.center
 import com.unciv.ui.components.extensions.colorFromRGB
-import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toGroup
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.extensions.toTextButton
@@ -33,7 +30,6 @@ import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.civilopediascreen.CivilopediaScreen
 import kotlin.math.ceil
-import kotlin.math.round
 import com.unciv.ui.components.widgets.AutoScrollPane as ScrollPane
 
 class CityStatsTable(private val cityScreen: CityScreen) : Table() {
@@ -46,12 +42,14 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
 
     private val detailedStatsButton = "Stats".toTextButton().apply {
         labelCell.pad(10f)
-        onActivation(binding = KeyboardBinding.ShowStats) {
-            DetailedStatsPopup(cityScreen).open()
-        }
+        if (cityScreen is ClassicCityScreen)
+            onActivation(binding = KeyboardBinding.ShowStats) {
+                DetailedStatsPopup(cityScreen).open()
+            }
     }
 
     init {
+        top()
         pad(2f)
         background = BaseScreen.skinStrings.getUiBackground(
             "CityScreen/CityStatsTable/Background",
@@ -72,41 +70,47 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
         lowerPane.setScrollingDisabled(true, false)
         lowerCell = innerTable.add(lowerPane)
 
-        add(innerTable)
+        add(innerTable).growY()
     }
 
     fun update(height: Float) {
         upperTable.clear()
         lowerTable.clear()
 
-        val miniStatsTable = Table()
-        val selected = BaseScreen.skin.getColor("selection")
-        for ((stat, amount) in city.cityStats.currentCityStats) {
-            if (stat == Stat.Faith && !city.civ.gameInfo.isReligionEnabled()) continue
-            val icon = Table()
-            val focus = CityFocus.safeValueOf(stat)
-            val toggledFocus = if (focus == city.cityAIFocus) {
-                icon.add(ImageGetter.getStatIcon(stat.name).surroundWithCircle(27f, false, color = selected))
-                CityFocus.NoFocus
-            } else {
-                icon.add(ImageGetter.getStatIcon(stat.name).surroundWithCircle(27f, false, color = Color.CLEAR))
-                focus
-            }
-            if (cityScreen.canCityBeChanged()) {
-                icon.onActivation(binding = toggledFocus.binding) {
-                    city.cityAIFocus = toggledFocus
-                    city.reassignPopulation()
-                    cityScreen.update()
-                }
-            }
-            miniStatsTable.add(icon).size(27f).padRight(3f)
-            val valueToDisplay = if (stat == Stat.Happiness) city.cityStats.happinessList.values.sum() else amount
-            miniStatsTable.add(round(valueToDisplay).toInt().toLabel()).padRight(5f)
-        }
-        upperTable.add(miniStatsTable)
+//         val miniStatsTable = Table()
+//         val selected = BaseScreen.skin.getColor("selection")
+//         for ((stat, amount) in city.cityStats.currentCityStats) {
+//             if (stat == Stat.Faith && !city.civ.gameInfo.isReligionEnabled()) continue
+//             val icon = Table()
+//             val focus = CityFocus.safeValueOf(stat)
+//             val toggledFocus = if (focus == city.cityAIFocus) {
+//                 icon.add(ImageGetter.getStatIcon(stat.name).surroundWithCircle(27f, false, color = selected))
+//                 CityFocus.NoFocus
+//             } else {
+//                 icon.add(ImageGetter.getStatIcon(stat.name).surroundWithCircle(27f, false, color = Color.CLEAR))
+//                 focus
+//             }
+//             if (cityScreen.canCityBeChanged()) {
+//                 icon.onActivation(binding = toggledFocus.binding) {
+//                     city.cityAIFocus = toggledFocus
+//                     city.reassignPopulation()
+//                     cityScreen.update()
+//                 }
+//             }
+//             miniStatsTable.add(icon).size(27f).padRight(3f)
+//             val valueToDisplay = if (stat == Stat.Happiness) city.cityStats.happinessList.values.sum() else amount
+//             miniStatsTable.add(round(valueToDisplay).toInt().toLabel()).padRight(5f)
+//         }
+//         upperTable.add(miniStatsTable)
 
-        upperTable.addSeparator()
-        upperTable.add(detailedStatsButton).row()
+        if (cityScreen is ClassicCityScreen) {
+            upperTable.add(CityScreenMiniStats(cityScreen) {
+                cityScreen.update()
+            })
+            upperTable.addSeparator()
+            upperTable.add(detailedStatsButton).row()
+        }
+
         addText()
 
         // begin lowerTable
@@ -118,7 +122,8 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
         if (city.religion.getNumberOfFollowers().isNotEmpty() && city.civ.gameInfo.isReligionEnabled())
             addReligionInfo()
 
-        addBuildingsInfo()
+        if (cityScreen is ClassicCityScreen)
+            addBuildingsInfo()
 
         upperTable.pack()
         lowerTable.pack()

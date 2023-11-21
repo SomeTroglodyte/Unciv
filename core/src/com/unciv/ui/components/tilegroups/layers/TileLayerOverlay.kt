@@ -48,7 +48,7 @@ class TileLayerOverlay(tileGroup: TileGroup, size: Float) : TileLayer(tileGroup,
 
     fun showHighlight(color: Color, alpha: Float = 0.3f) {
         highlight.isVisible = true
-        highlight.color = color.cpy().apply { a = alpha }
+        highlight.color.set(color.r, color.g, color.b, alpha)
         determineVisibility()
     }
 

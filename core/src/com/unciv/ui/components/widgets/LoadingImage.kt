@@ -139,13 +139,14 @@ class LoadingImage(
     }
 
     private fun hideDelayed(onComplete: (() -> Unit)?) {
-        val waitDuration = getWaitDuration()
-        if (waitDuration == 0f) return setHidden()
-        actions.clear()
-        actions.add(Actions.delay(waitDuration, Actions.run {
+        val finishHide = fun() {
             setHidden()
             onComplete?.invoke()
-        }))
+        }
+        val waitDuration = getWaitDuration()
+        if (waitDuration == 0f) return finishHide()
+        actions.clear()
+        actions.add(Actions.delay(waitDuration, Actions.run(finishHide)))
     }
 
     private fun setHidden() {

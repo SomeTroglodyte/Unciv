@@ -38,6 +38,8 @@ These shapes are used all over Unciv and can be replaced to make a lot of UI ele
 |---|:---:|:---:|---|
 | AnimatedMenu/ | Button | roundedEdgeRectangleMid | |
 | CityScreen/ | CityPickerTable | roundedEdgeRectangle | |
+| CityScreen/ | Header | null | |
+| CityScreen/ | MiniStats | null | |
 | CityScreen/CitizenManagementTable/ | AvoidCell | null | |
 | CityScreen/CitizenManagementTable/ | FocusCell | null | |
 | CityScreen/CitizenManagementTable/ | ResetCell | null | |
@@ -54,6 +56,7 @@ These shapes are used all over Unciv and can be replaced to make a lot of UI ele
 | CityScreen/CityStatsTable/ | InnerTable | null | |
 | CityScreen/ConstructionInfoTable/ | Background | null | |
 | CityScreen/ConstructionInfoTable/ | SelectedConstructionTable | null | |
+| CityScreen/UnassignedPanel/ | Background | roundedEdgeRectangleSmall | |
 | CivilopediaScreen/ | EntryButton | null | |
 | DiplomacyScreen/ | LeftSide | null | |
 | DiplomacyScreen/ | RightSide | null | |

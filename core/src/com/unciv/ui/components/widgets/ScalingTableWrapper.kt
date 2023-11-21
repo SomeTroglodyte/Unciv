@@ -1,6 +1,7 @@
 package com.unciv.ui.components.widgets
 
 import com.badlogic.gdx.scenes.scene2d.Actor
+import com.badlogic.gdx.scenes.scene2d.Group
 import com.badlogic.gdx.scenes.scene2d.ui.Cell
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.WidgetGroup
@@ -49,6 +50,7 @@ open class ScalingTableWrapper(
 
     fun defaults(): Cell<Actor> = innerTable.defaults()
     fun add(actor: Actor): Cell<Actor> = innerTable.add(actor)
+    fun add(actor: Group): Cell<Group> = innerTable.add(actor)
     fun add(): Cell<Actor?> = innerTable.add()
     fun row(): Cell<Actor> = innerTable.row()
     //endregion

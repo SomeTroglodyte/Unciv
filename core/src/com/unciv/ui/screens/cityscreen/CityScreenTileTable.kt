@@ -7,16 +7,14 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.logic.map.tile.TileDescription
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
-import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.darken
 import com.unciv.ui.components.extensions.disable
 import com.unciv.ui.components.extensions.isEnabled
-import com.unciv.ui.components.input.keyShortcuts
-import com.unciv.ui.components.input.onActivation
-import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.extensions.toTextButton
 import com.unciv.ui.components.input.KeyboardBinding
+import com.unciv.ui.components.input.onActivation
+import com.unciv.ui.components.input.onClick
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.civilopediascreen.CivilopediaScreen
@@ -55,7 +53,7 @@ class CityScreenTileTable(private val cityScreen: CityScreen) : Table() {
         innerTable.row()
         innerTable.add(getTileStatsTable(stats)).row()
 
-        if (city.expansion.canBuyTile(selectedTile)) {
+        if (cityScreen.canCityBeChanged() && city.expansion.canBuyTile(selectedTile)) {
             val goldCostOfTile = city.expansion.getGoldCostOfTile(selectedTile)
             val buyTileButton = "Buy for [$goldCostOfTile] gold".toTextButton()
             buyTileButton.onActivation(binding = KeyboardBinding.BuyTile) {
@@ -72,7 +70,7 @@ class CityScreenTileTable(private val cityScreen: CityScreen) : Table() {
         if (selectedTile.getWorkingCity() != null)
             innerTable.add("Worked by [${selectedTile.getWorkingCity()!!.name}]".toLabel()).row()
 
-        if (city.isWorked(selectedTile)) {
+        if (cityScreen.canCityBeChanged() && city.isWorked(selectedTile)) {
             if (selectedTile.isLocked()) {
                 val unlockButton = "Unlock".toTextButton()
                 unlockButton.onClick {
@@ -93,6 +91,7 @@ class CityScreenTileTable(private val cityScreen: CityScreen) : Table() {
                 innerTable.add(lockButton).padTop(5f).row()
             }
         }
+
         if (selectedTile.isCityCenter() && selectedTile.getCity() != city && selectedTile.getCity()!!.civ == city.civ)
             innerTable.add("Move to city".toTextButton().onClick { cityScreen.game.replaceCurrentScreen(
                 CityScreen(selectedTile.getCity()!!)

@@ -51,7 +51,7 @@ class ConstructionInfoTable(val cityScreen: CityScreen) : Table() {
 
         updateSelectedConstructionTable(selectedConstruction)
 
-        pack()
+        //pack()
     }
 
     private fun updateSelectedConstructionTable(construction: IConstruction) {

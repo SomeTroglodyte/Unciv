@@ -25,8 +25,6 @@ import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
 import com.unciv.models.translations.tr
 import com.unciv.ui.audio.SoundPlayer
-import com.unciv.ui.components.widgets.ColorMarkupLabel
-import com.unciv.ui.components.widgets.ExpanderTab
 import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.addBorder
 import com.unciv.ui.components.extensions.addCell
@@ -45,6 +43,8 @@ import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.input.onRightClick
+import com.unciv.ui.components.widgets.ColorMarkupLabel
+import com.unciv.ui.components.widgets.ExpanderTab
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.CityScreenConstructionMenu
 import com.unciv.ui.popups.ConfirmPopup
@@ -75,12 +75,12 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
     private var preferredBuyStat = Stat.Gold  // Used for keyboard buy
 
     private val upperTable = Table(BaseScreen.skin)
-    private val constructionsQueueScrollPane: ScrollPane
+    internal val constructionsQueueScrollPane: ScrollPane
     private val constructionsQueueTable = Table()
-    private val buyButtonsTable = Table()
+    internal val buyButtonsTable = Table()
 
     private val lowerTable = Table()
-    private val availableConstructionsScrollPane: ScrollPane
+    internal val availableConstructionsScrollPane: ScrollPane
     private val availableConstructionsTable = Table()
     private val lowerTableScrollCell: Cell<ScrollPane>
 
