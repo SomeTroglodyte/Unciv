@@ -11,7 +11,6 @@ import com.unciv.UncivGame
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityFlags
 import com.unciv.models.Counter
-import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.tr
@@ -76,32 +75,6 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
     fun update(height: Float) {
         upperTable.clear()
         lowerTable.clear()
-
-//         val miniStatsTable = Table()
-//         val selected = BaseScreen.skin.getColor("selection")
-//         for ((stat, amount) in city.cityStats.currentCityStats) {
-//             if (stat == Stat.Faith && !city.civ.gameInfo.isReligionEnabled()) continue
-//             val icon = Table()
-//             val focus = CityFocus.safeValueOf(stat)
-//             val toggledFocus = if (focus == city.cityAIFocus) {
-//                 icon.add(ImageGetter.getStatIcon(stat.name).surroundWithCircle(27f, false, color = selected))
-//                 CityFocus.NoFocus
-//             } else {
-//                 icon.add(ImageGetter.getStatIcon(stat.name).surroundWithCircle(27f, false, color = Color.CLEAR))
-//                 focus
-//             }
-//             if (cityScreen.canCityBeChanged()) {
-//                 icon.onActivation(binding = toggledFocus.binding) {
-//                     city.cityAIFocus = toggledFocus
-//                     city.reassignPopulation()
-//                     cityScreen.update()
-//                 }
-//             }
-//             miniStatsTable.add(icon).size(27f).padRight(3f)
-//             val valueToDisplay = if (stat == Stat.Happiness) city.cityStats.happinessList.values.sum() else amount
-//             miniStatsTable.add(round(valueToDisplay).toInt().toLabel()).padRight(5f)
-//         }
-//         upperTable.add(miniStatsTable)
 
         if (cityScreen is ClassicCityScreen) {
             upperTable.add(CityScreenMiniStats(cityScreen) {
@@ -233,102 +206,12 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
     }
 
     private fun addBuildingsInfo() {
-        val wonders = mutableListOf<Building>()
-        val specialistBuildings = mutableListOf<Building>()
-        val otherBuildings = mutableListOf<Building>()
-
-        for (building in city.cityConstructions.getBuiltBuildings()) {
-            when {
-                building.isAnyWonder() -> wonders.add(building)
-                !building.newSpecialists().isEmpty() -> specialistBuildings.add(building)
-                else -> otherBuildings.add(building)
-            }
-        }
-
-        // Buildings sorted alphabetically
-        wonders.sortBy { it.name }
-        specialistBuildings.sortBy { it.name }
-        otherBuildings.sortBy { it.name }
-
-        val totalTable = Table()
-        lowerTable.addCategory("Buildings", totalTable, KeyboardBinding.BuildingsDetail, false)
-
-        if (specialistBuildings.isNotEmpty()) {
-            val specialistBuildingsTable = Table()
-            totalTable.add().row()
-            totalTable.addSeparator(color = Color.LIGHT_GRAY)
-            totalTable.add("Specialist Buildings".toLabel().apply { setAlignment(Align.center) }).growX()
-            totalTable.addSeparator(color = Color.LIGHT_GRAY)
-            for (building in specialistBuildings) addBuildingButton(building, specialistBuildingsTable)
-            totalTable.add(specialistBuildingsTable).growX().right().row()
-        }
-
-        if (wonders.isNotEmpty()) {
-            val wondersTable = Table()
-            totalTable.addSeparator(color = Color.LIGHT_GRAY)
-            totalTable.add("Wonders".toLabel().apply { setAlignment(Align.center) }).growX()
-            totalTable.addSeparator(color = Color.LIGHT_GRAY)
-            for (building in wonders) addBuildingButton(building, wondersTable)
-            totalTable.add(wondersTable).growX().right().row()
-        }
-
-        if (otherBuildings.isNotEmpty()) {
-            val regularBuildingsTable = Table()
-            totalTable.addSeparator(color = Color.LIGHT_GRAY)
-            totalTable.add("Other".toLabel().apply { setAlignment(Align.center) }).growX()
-            totalTable.addSeparator(color = Color.LIGHT_GRAY)
-            for (building in otherBuildings) addBuildingButton(building, regularBuildingsTable)
-            totalTable.add(regularBuildingsTable).growX().right().row()
-        }
-    }
-
-    private fun addBuildingButton(building: Building, destinationTable: Table) {
-
-        val button = Table()
-
-        val info = Table()
-        val statsAndSpecialists = Table()
-
-        val icon = ImageGetter.getConstructionPortrait(building.name, 50f)
-        val isFree = cityScreen.hasFreeBuilding(building)
-        val displayName = if (isFree) "{${building.name}} ({Free})" else building.name
-
-        info.add(displayName.toLabel(fontSize = Constants.defaultFontSize, hideIcons = true)).padBottom(5f).right().row()
-
-        val stats = building.getStats(city).joinToString(separator = " ") {
-            "" + it.value.toInt() + it.key.character
-        }
-        statsAndSpecialists.add(stats.toLabel(fontSize = Constants.defaultFontSize)).right()
-
-        val assignedSpec = city.population.getNewSpecialists().clone()
-
-        val specialistIcons = Table()
-        for ((specialistName, amount) in building.newSpecialists()) {
-            val specialist = city.getRuleset().specialists[specialistName]
-                ?: continue // probably a mod that doesn't have the specialist defined yet
-            repeat(amount) {
-                if (assignedSpec[specialistName] > 0) {
-                    specialistIcons.add(ImageGetter.getSpecialistIcon(specialist.colorObject))
-                        .size(20f)
-                    assignedSpec.add(specialistName, -1)
-                } else {
-                    specialistIcons.add(ImageGetter.getSpecialistIcon(Color.GRAY)).size(20f)
-                }
-            }
-        }
-        statsAndSpecialists.add(specialistIcons).right()
-
-        info.add(statsAndSpecialists).right()
-
-        button.add(info).right().top().padRight(10f).padTop(5f)
-        button.add(icon).right()
-
-        button.onClick {
-            cityScreen.selectConstruction(building)
+        val totalTable = CityScreenBuildingsTable(cityScreen) {
+            cityScreen.selectConstruction(it)
             cityScreen.update()
         }
-
-        destinationTable.add(button).pad(1f).padBottom(2f).padTop(2f).expandX().right().row()
+        totalTable.update()
+        lowerTable.addCategory("Buildings", totalTable, KeyboardBinding.BuildingsDetail, false)
     }
 
     private fun Table.addCategory(

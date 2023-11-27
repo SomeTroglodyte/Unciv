@@ -54,6 +54,10 @@ internal class TabbedCityScreen(
     private val mapPage = CityScreenMapPage(this, selectTile)
     private val constructionPage = CityScreenConstructionsPage(this, selectConstruction)
     private val statsBreakdownPage = DetailedStatsContent(this)
+    private val buildingsPage = CityScreenBuildingsTable(this) {
+        selectConstruction(it)
+        updateConstruction()
+    }
 
     override val selectedConstruction get() = constructionPage.selectedConstruction
 
@@ -75,12 +79,12 @@ internal class TabbedCityScreen(
         val pagerHeight = stageHeight - header.prefHeight - miniStats.prefHeight - 2f
         pager = TabbedPager(stageWidth, stageWidth, pagerHeight, pagerHeight, shortcutScreen = this, capacity = CityScreenPages.size)
         for (page in CityScreenPages.values()) {
-            val content: Actor? = when(page) {
+            val content: Actor = when(page) {
                 CityScreenPages.Info -> infoPage
                 CityScreenPages.Map -> mapPage
                 CityScreenPages.Construction -> constructionPage
                 CityScreenPages.StatBreakdown -> statsBreakdownPage
-                else -> null
+                CityScreenPages.BuiltBuildings -> buildingsPage
             }
             pager.addPage(page.caption, content, page.getIcon(), shortcutKey = page.getKey())
         }
