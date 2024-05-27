@@ -252,7 +252,7 @@
 		"happiness": 5,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Requires a [Colosseum] in all cities", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [Colosseum] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
 		"requiredTech": "Horseback Riding"
 	},
 	{
@@ -260,7 +260,7 @@
 		"maintenance": 4,
 		"hurryCostModifier": 50,
 		"uniques": ["Remove extra unhappiness from annexed cities",
-			"Can only be built [in annexed cities]"],
+			"Can only be built <in [Annexed] cities>"],
 		"requiredTech": "Mathematics"
 	},
 	{
@@ -328,7 +328,7 @@
 		"culture": 1,
 		"isNationalWonder": true,
 		"percentStatBonus": {"science": 50},
-		"uniques": ["Requires a [Library] in all cities", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [Library] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
 		"requiredTech": "Philosophy"
 	},
 	{
@@ -355,7 +355,7 @@
 		"cost": 125,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Requires a [Monument] in all cities", "[+25]% Great Person generation [in this city]", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [Monument] is constructed in all [non-[Puppeted]] cities>", "[+25]% Great Person generation [in this city]", "Cost increases by [30] per owned city"],
 		"requiredTech": "Drama and Poetry"
 	},
 	{
@@ -417,7 +417,7 @@
 		"cost": 125,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Requires a [Barracks] in all cities", "All newly-trained [non-[Air]] units [in this city] receive the [Morale] promotion",
+		"uniques": ["Only available <if [Barracks] is constructed in all [non-[Puppeted]] cities>", "All newly-trained [non-[Air]] units [in this city] receive the [Morale] promotion",
 			"Cost increases by [30] per owned city"],
 		"requiredTech": "Iron Working"
 	},
@@ -468,8 +468,8 @@
 		"cost": 125,
 		"culture": 1,
 		"faith": 8,
-		"uniques": ["Requires a [Temple] in all cities", "Cost increases by [30] per owned city",
-			"[+100]% Natural religion spread [in this city]", "Hidden when religion is disabled", "Can only be built [in holy cities]"],
+		"uniques": ["Only available <if [Temple] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city",
+			"[+100]% Natural religion spread [in this city]", "Hidden when religion is disabled", "Can only be built <in [Holy] cities>"],
 		"requiredTech": "Theology",
 		"isNationalWonder": true
 	},
@@ -489,7 +489,7 @@
 		"gold": 8,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Requires a [Market] in all cities", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [Market] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
 		"requiredTech": "Guilds"
 	},
 	{
@@ -498,7 +498,7 @@
 		"greatPersonPoints": {"Great Merchant": 1},
 		"culture": 1,
 		"isWonder": true,
-		"uniques": ["[+25]% [Gold] from Trade Routes","Must have an owned [Mountain] within [2] tiles"],
+		"uniques": ["[+25]% [Gold] from Trade Routes", "Must have an owned [Mountain] within [2] tiles"],
 		"requiredTech": "Guilds",
 		"quote": "'Few romances can ever surpass that of the granite citadel on top of the beetling precipices of Machu Picchu, the crown of Inca Land.' - Hiram Bingham"
 	},
@@ -572,7 +572,7 @@
 		"science": 3,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Requires a [University] in all cities", "Free Technology", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [University] is constructed in all [non-[Puppeted]] cities>", "Free Technology", "Cost increases by [30] per owned city"],
 		"requiredTech": "Education"
 	},
 	{
@@ -623,7 +623,7 @@
 		"production": 8,
 		"culture": 1,
 		"isNationalWonder": true,
-		"uniques": ["Requires a [Workshop] in all cities", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [Workshop] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
 		"requiredTech": "Machinery"
 	},
 	{
@@ -709,6 +709,14 @@
 		"requiredBuilding": "Market",
 		"requiredTech": "Banking"
 	},
+    {
+        "name": "Constabulary",
+        "cost": 160,
+        "maintenance": 1,
+        "hurryCostModifier": 10,
+        "uniques": ["Hidden when espionage is disabled", "[-25]% enemy spy effectiveness [in this city]"],
+        "requiredTech": "Banking"
+    },
 	// will be introduced in BNW expansion pack
 //	{
 //		"name": "Hanse",
@@ -774,7 +782,7 @@
 		"percentStatBonus": {"culture": 50},
 		"culture": 5,
 		"isNationalWonder": true,
-		"uniques": ["Requires a [Opera House] in all cities", "Cost increases by [30] per owned city"],
+		"uniques": ["Only available <if [Opera House] is constructed in all [non-[Puppeted]] cities>", "Cost increases by [30] per owned city"],
 		"requiredTech": "Architecture"
 	},
 	{
@@ -934,6 +942,15 @@
 		"uniques": ["Must be on [River]","[+1 Production] from [River] tiles [in this city]"],
 		"requiredTech": "Electricity"
 	},
+    {
+        "name": "Police Station",
+        "cost": 300,
+        "maintenance": 1,
+        "hurryCostModifier": 10,
+        "uniques": ["Hidden when espionage is disabled", "[-25]% enemy spy effectiveness [in this city]"],
+        "requiredBuilding": "Constabulary",
+        "requiredTech": "Electricity"
+    },
 
 	// Modern Era
 
@@ -964,6 +981,20 @@
 		"requiredTech": "Radio",
 		"quote": "'We live only to discover beauty, all else is a form of waiting' - Kahlil Gibran"
 	},
+    {
+        "name": "National Intelligence Agency",
+        "cost": 120,
+        "culture": 1,
+        "isNationalWonder": true,
+        "uniques": ["Hidden when espionage is disabled",
+            "New spies start with [1] level(s)",
+            "Promotes all spies",
+            "Gain an extra spy", // Order is significant here
+			"[-15]% enemy spy effectiveness [in this city]",
+			"Only available <if [Police Station] is constructed in all [non-[Puppeted]] cities>",
+			"Cost increases by [30] per owned city"],
+        "requiredTech": "Radio"
+    },
 	{
 		"name": "Military Base",
 		"cityStrength": 12,
@@ -1083,6 +1114,13 @@
 			"Hidden when [Scientific] Victory is disabled", "Cannot be hurried"],
 		"requiredTech": "Rocketry"
 	},
+    {
+        "name": "Great Firewall",
+        "isWonder": true,
+        "uniques": ["Hidden when espionage is disabled", "[-99]% enemy spy effectiveness [in this city]",
+            "[-25]% enemy spy effectiveness [in all cities]",],
+        "requiredTech": "Computers"
+    },
 
 	// Information Era
 

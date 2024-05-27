@@ -2,6 +2,7 @@ package com.unciv.logic.automation.civilization
 
 import com.unciv.logic.automation.Automation
 import com.unciv.logic.automation.ThreatLevel
+import com.unciv.logic.automation.unit.EspionageAutomation
 import com.unciv.logic.automation.unit.UnitAutomation
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.AlertType
@@ -15,10 +16,10 @@ import com.unciv.logic.civilization.diplomacy.DiplomaticStatus
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.ruleset.MilestoneType
-import com.unciv.models.ruleset.ModOptionsConstants
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.PolicyBranch
 import com.unciv.models.ruleset.Victory
+import com.unciv.models.ruleset.nation.PersonalityValue
 import com.unciv.models.ruleset.tech.Technology
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.StateForConditionals
@@ -33,12 +34,13 @@ object NextTurnAutomation {
     /** Top-level AI turn task list */
     fun automateCivMoves(civInfo: Civilization) {
         if (civInfo.isBarbarian()) return BarbarianAutomation(civInfo).automate()
+        if (civInfo.isSpectator()) return // When there's a spectator in multiplayer games, it's processed automatically, but shouldn't be able to actually do anything
 
         respondToPopupAlerts(civInfo)
         TradeAutomation.respondToTradeRequests(civInfo)
 
         if (civInfo.isMajorCiv()) {
-            if (!civInfo.gameInfo.ruleset.modOptions.hasUnique(ModOptionsConstants.diplomaticRelationshipsCannotChange)) {
+            if (!civInfo.gameInfo.ruleset.modOptions.hasUnique(UniqueType.DiplomaticRelationshipsCannotChange)) {
                 DiplomacyAutomation.declareWar(civInfo)
                 DiplomacyAutomation.offerPeaceTreaty(civInfo)
                 DiplomacyAutomation.offerDeclarationOfFriendship(civInfo)
@@ -67,9 +69,15 @@ object NextTurnAutomation {
         }
         automateUnits(civInfo)  // this is the most expensive part
 
-        if (civInfo.isMajorCiv() && civInfo.gameInfo.isReligionEnabled()) {
-            // Can only be done now, as the prophet first has to decide to found/enhance a religion
-            ReligionAutomation.chooseReligiousBeliefs(civInfo)
+        if (civInfo.isMajorCiv()) {
+            if (civInfo.gameInfo.isReligionEnabled()) {
+                // Can only be done now, as the prophet first has to decide to found/enhance a religion
+                ReligionAutomation.chooseReligiousBeliefs(civInfo)
+            }
+            if (civInfo.gameInfo.isEspionageEnabled()) {
+                // Do after cities are conquered
+                EspionageAutomation(civInfo).automateSpies()
+            }
         }
 
         automateCities(civInfo)  // second most expensive
@@ -118,17 +126,32 @@ object NextTurnAutomation {
         civInfo.popupAlerts.clear() // AIs don't care about popups.
     }
 
-    internal fun valueCityStateAlliance(civInfo: Civilization, cityState: Civilization): Int {
+    internal fun valueCityStateAlliance(civInfo: Civilization, cityState: Civilization, includeQuests: Boolean = false): Int {
         var value = 0
+        val civPersonality = civInfo.getPersonality()
 
-        if (civInfo.wantsToFocusOn(Victory.Focus.Culture) && cityState.cityStateFunctions.canProvideStat(Stat.Culture)) {
-            value += 10
+        if (cityState.cityStateFunctions.canProvideStat(Stat.Culture)) {
+            if (civInfo.wantsToFocusOn(Victory.Focus.Culture))
+                value += 10
+            value += civPersonality[PersonalityValue.Culture].toInt() - 5
         }
-        else if (civInfo.wantsToFocusOn(Victory.Focus.Science) && cityState.cityStateFunctions.canProvideStat(Stat.Science)) {
+        if (cityState.cityStateFunctions.canProvideStat(Stat.Faith)) {
+            if (civInfo.wantsToFocusOn(Victory.Focus.Faith))
+                value += 10
+            value += civPersonality[PersonalityValue.Faith].toInt() - 5
+        }
+        if (cityState.cityStateFunctions.canProvideStat(Stat.Production)) {
+            if (civInfo.wantsToFocusOn(Victory.Focus.Production))
+                value += 10
+            value += civPersonality[PersonalityValue.Production].toInt() - 5
+        }
+        if (cityState.cityStateFunctions.canProvideStat(Stat.Science)) {
             // In case someone mods this in
-            value += 10
+            if (civInfo.wantsToFocusOn(Victory.Focus.Science))
+                value += 10
+            value += civPersonality[PersonalityValue.Science].toInt() - 5
         }
-        else if (civInfo.wantsToFocusOn(Victory.Focus.Military)) {
+        if (civInfo.wantsToFocusOn(Victory.Focus.Military)) {
             if (!cityState.isAlive())
                 value -= 5
             else {
@@ -138,20 +161,28 @@ object NextTurnAutomation {
                     value -= (20 - distance) / 4
             }
         }
-        else if (civInfo.wantsToFocusOn(Victory.Focus.CityStates)) {
+        if (civInfo.wantsToFocusOn(Victory.Focus.CityStates)) {
             value += 5  // Generally be friendly
         }
         if (civInfo.getHappiness() < 5 && cityState.cityStateFunctions.canProvideStat(Stat.Happiness)) {
             value += 10 - civInfo.getHappiness()
+            value += civPersonality[PersonalityValue.Happiness].toInt() - 5
         }
         if (civInfo.getHappiness() > 5 && cityState.cityStateFunctions.canProvideStat(Stat.Food)) {
             value += 5
+            value += civPersonality[PersonalityValue.Food].toInt() - 5
         }
 
         if (!cityState.isAlive() || cityState.cities.isEmpty() || civInfo.cities.isEmpty())
             return value
 
-        if (civInfo.gold < 100) {
+        // The more we have invested into the city-state the more the alliance is worth
+        val ourInfluence = if (civInfo.knows(cityState))
+            cityState.getDiplomacyManager(civInfo).getInfluence().toInt()
+        else 0
+        value += ourInfluence / 10
+
+        if (civInfo.gold < 100 && ourInfluence < 30) {
             // Consider bullying for cash
             value -= 5
         }
@@ -159,13 +190,18 @@ object NextTurnAutomation {
         if (cityState.getAllyCiv() != null && cityState.getAllyCiv() != civInfo.civName) {
             // easier not to compete if a third civ has this locked down
             val thirdCivInfluence = cityState.getDiplomacyManager(cityState.getAllyCiv()!!).getInfluence().toInt()
-            value -= (thirdCivInfluence - 60) / 10
+            value -= (thirdCivInfluence - 30) / 10
         }
 
         // Bonus for luxury resources we can get from them
         value += cityState.detailedCivResources.count {
             it.resource.resourceType == ResourceType.Luxury
             && it.resource !in civInfo.detailedCivResources.map { supply -> supply.resource }
+        }
+
+        if (includeQuests) {
+            // Investing is better if there is an investment bonus quest active.
+            value += (cityState.questManager.getInvestmentMultiplier(civInfo.civName) * 10).toInt() - 10
         }
 
         return value
@@ -298,6 +334,37 @@ object NextTurnAutomation {
         }
     }
 
+    fun chooseGreatPerson(civInfo: Civilization) {
+        if (civInfo.greatPeople.freeGreatPeople == 0) return
+        val mayanGreatPerson = civInfo.greatPeople.mayaLimitedFreeGP > 0
+        val greatPeople =
+            if (mayanGreatPerson)
+                civInfo.greatPeople.getGreatPeople().filter { it.name in civInfo.greatPeople.longCountGPPool }
+            else civInfo.greatPeople.getGreatPeople()
+
+        if (greatPeople.isEmpty()) return
+        var greatPerson = greatPeople.random()
+
+        if (civInfo.wantsToFocusOn(Victory.Focus.Culture)) {
+            val culturalGP =
+                greatPeople.firstOrNull { it.uniques.contains("Great Person - [Culture]") }
+            if (culturalGP != null) greatPerson = culturalGP
+        }
+        if (civInfo.wantsToFocusOn(Victory.Focus.Science)) {
+            val scientificGP =
+                greatPeople.firstOrNull { it.uniques.contains("Great Person - [Science]") }
+            if (scientificGP != null) greatPerson = scientificGP
+        }
+
+        civInfo.units.addUnit(greatPerson, civInfo.cities.firstOrNull { it.isCapital() })
+
+        civInfo.greatPeople.freeGreatPeople--
+        if (mayanGreatPerson){
+            civInfo.greatPeople.longCountGPPool.remove(greatPerson.name)
+            civInfo.greatPeople.mayaLimitedFreeGP--
+        }
+    }
+
     /** If we are able to build a spaceship but have already spent our resources, try disbanding
      *  a unit and selling a building to make room. Can happen due to trades etc */
     private fun freeUpSpaceResources(civInfo: Civilization) {
@@ -320,7 +387,7 @@ object NextTurnAutomation {
                     continue
                 val buildingToSell = civInfo.gameInfo.ruleset.buildings.values.filter {
                         city.cityConstructions.isBuilt(it.name)
-                        && it.requiresResource(resource, StateForConditionals(civInfo, city))
+                        && it.requiredResources(StateForConditionals(civInfo, city)).contains(resource)
                         && it.isSellable()
                         && !civInfo.civConstructions.hasFreeBuilding(city, it) }
                     .randomOrNull()
@@ -339,9 +406,15 @@ object NextTurnAutomation {
         for (unit in sortedUnits) UnitAutomation.automateUnitMoves(unit)
     }
 
-    private fun getUnitPriority(unit: MapUnit, isAtWar: Boolean): Int {
+    /** Returns the priority of the unit, a lower value is higher priority **/
+    fun getUnitPriority(unit: MapUnit, isAtWar: Boolean): Int {
         if (unit.isCivilian() && !unit.isGreatPersonOfType("War")) return 1 // Civilian
-        if (unit.baseUnit.isAirUnit()) return 2
+        if (unit.baseUnit.isAirUnit()) return when {
+            unit.canIntercept() -> 2 // Fighers first
+            unit.isNuclearWeapon() -> 3 // Then Nukes (area damage)
+            !unit.hasUnique(UniqueType.SelfDestructs) -> 4 // Then Bombers (reusable)
+            else -> 5 // Missiles
+        }
         val distance = if (!isAtWar) 0 else unit.civ.threatManager.getDistanceToClosestEnemyUnit(unit.getTile(),6)
         // Lower health units should move earlier to swap with higher health units
         return distance + (unit.health / 10) + when {
@@ -352,11 +425,11 @@ object NextTurnAutomation {
         }
     }
 
-    private fun automateCityBombardment(civInfo: Civilization) {
+    fun automateCityBombardment(civInfo: Civilization) {
         for (city in civInfo.cities) UnitAutomation.tryBombardEnemy(city)
     }
 
-    private fun automateCities(civInfo: Civilization) {
+    fun automateCities(civInfo: Civilization) {
         val ownMilitaryStrength = civInfo.getStatForRanking(RankingType.Force)
         val sumOfEnemiesMilitaryStrength =
                 civInfo.gameInfo.civilizations
@@ -384,14 +457,19 @@ object NextTurnAutomation {
     }
 
     private fun trainSettler(civInfo: Civilization) {
+        val personality = civInfo.getPersonality()
         if (civInfo.isCityState()) return
         if (civInfo.isAtWar()) return // don't train settlers when you could be training troops.
-        if (civInfo.wantsToFocusOn(Victory.Focus.Culture) && civInfo.cities.size > 3) return
+        if (civInfo.wantsToFocusOn(Victory.Focus.Culture) && civInfo.cities.size > 3 &&
+            civInfo.getPersonality().isNeutralPersonality)
+            return
         if (civInfo.cities.none()) return
         if (civInfo.getHappiness() <= civInfo.cities.size) return
 
         val settlerUnits = civInfo.gameInfo.ruleset.units.values
-                .filter { it.isCityFounder() && it.isBuildable(civInfo) }
+                .filter { it.isCityFounder() && it.isBuildable(civInfo) &&
+                    personality.getMatchingUniques(UniqueType.WillNotBuild, StateForConditionals(civInfo))
+                        .none { unique -> it.matchesFilter(unique.params[0]) } }
         if (settlerUnits.isEmpty()) return
         if (!civInfo.units.getCivUnits().none { it.hasUnique(UniqueType.FoundCity) }) return
 
@@ -410,10 +488,10 @@ object NextTurnAutomation {
         val bestCity = civInfo.cities.filterNot { it.isPuppet }
             // If we can build workers, then we want AT LEAST 2 improvements, OR a worker nearby.
             // Otherwise, AI tries to produce settlers when it can hardly sustain itself
-            .filter {
+            .filter { city ->
                 !workersBuildableForThisCiv
-                    || it.getCenterTile().getTilesInDistance(2).count { it.improvement!=null } > 1
-                    || it.getCenterTile().getTilesInDistance(3).any { it.civilianUnit?.hasUnique(UniqueType.BuildImprovements)==true }
+                    || city.getCenterTile().getTilesInDistance(2).count { it.improvement!=null } > 1
+                    || city.getCenterTile().getTilesInDistance(3).any { it.civilianUnit?.hasUnique(UniqueType.BuildImprovements)==true }
             }
             .maxByOrNull { it.cityStats.currentCityStats.production }
             ?: return

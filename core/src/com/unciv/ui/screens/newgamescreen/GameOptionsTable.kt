@@ -11,20 +11,19 @@ import com.unciv.logic.civilization.PlayerType
 import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.metadata.GameParameters
 import com.unciv.models.metadata.Player
+import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.nation.Nation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.tr
 import com.unciv.ui.audio.MusicMood
 import com.unciv.ui.audio.MusicTrackChooserFlags
+import com.unciv.ui.components.extensions.getCloseButton
 import com.unciv.ui.components.extensions.pad
 import com.unciv.ui.components.extensions.toCheckBox
 import com.unciv.ui.components.extensions.toImageButton
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.extensions.toTextButton
-import com.unciv.ui.components.input.KeyCharAndCode
-import com.unciv.ui.components.input.keyShortcuts
-import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.components.input.onChange
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.AutoScrollPane
@@ -43,9 +42,11 @@ class GameOptionsTable(
     private val updatePlayerPickerTable: (desiredCiv: String) -> Unit,
     private val updatePlayerPickerRandomLabel: () -> Unit
 ) : Table(BaseScreen.skin) {
-    var gameParameters = previousScreen.gameSetupInfo.gameParameters
-    val ruleset = previousScreen.ruleset
-    var locked = false
+    private var gameParameters = previousScreen.gameSetupInfo.gameParameters
+    private var ruleset = previousScreen.ruleset
+    internal var locked = false
+
+    private var baseRulesetHash = gameParameters.baseRuleset.hashCode()
 
     /** Holds the UI for the Extension Mods
      *
@@ -55,7 +56,7 @@ class GameOptionsTable(
      *
      *  The second reason this is public: [NewGameScreen] accesses [ModCheckboxTable.savedModcheckResult] for display.
      */
-    val modCheckboxes = getModCheckboxes(isPortrait = isPortrait)
+    internal val modCheckboxes = getModCheckboxes(isPortrait = isPortrait)
 
     // Remember this so we can unselect it when the pool dialog returns an empty pool
     private var randomNationsPoolCheckbox: CheckBox? = null
@@ -71,6 +72,14 @@ class GameOptionsTable(
 
     fun update() {
         clear()
+
+        // Mods may have changed (e.g. custom map selection)
+        modCheckboxes.updateSelection()
+        val newBaseRulesetHash = gameParameters.baseRuleset.hashCode()
+        if (newBaseRulesetHash != baseRulesetHash) {
+            baseRulesetHash = newBaseRulesetHash
+            modCheckboxes.setBaseRuleset(gameParameters.baseRuleset)
+        }
 
         add(Table().apply {
             defaults().pad(5f)
@@ -399,7 +408,7 @@ class GameOptionsTable(
     }
 
     private fun Table.addEraSelectBox() {
-        if (ruleset.technologies.isEmpty()) return // mod with no techs
+        if (ruleset.eras.isEmpty()) return // mod with no techs
         val eras = ruleset.eras.keys
         addSelectBox("{Starting Era}:", eras, gameParameters.startingEra)
         { gameParameters.startingEra = it; null }
@@ -430,6 +439,13 @@ class GameOptionsTable(
         add(victoryConditionsTable).colspan(2).row()
     }
 
+    fun updateRuleset(ruleset: Ruleset) {
+        this.ruleset = ruleset
+        gameParameters.acceptedModCheckErrors = ""
+        modCheckboxes.updateSelection()
+        modCheckboxes.setBaseRuleset(gameParameters.baseRuleset)
+    }
+
     fun resetRuleset() {
         val rulesetName = BaseRuleset.Civ_V_GnK.fullName
         gameParameters.baseRuleset = rulesetName
@@ -446,6 +462,7 @@ class GameOptionsTable(
         ruleset.mods += gameParameters.baseRuleset
         ruleset.mods += gameParameters.mods
         ruleset.modOptions = newRuleset.modOptions
+        gameParameters.acceptedModCheckErrors = ""
 
         ImageGetter.setNewRuleset(ruleset)
         UncivGame.Current.musicController.setModList(gameParameters.getModsAndBaseRuleset())
@@ -476,6 +493,11 @@ class GameOptionsTable(
         }
 
         updatePlayerPickerTable(desiredCiv)
+    }
+
+    fun changeGameParameters(newGameParameters: GameParameters) {
+        gameParameters = newGameParameters
+        modCheckboxes.changeGameParameters(newGameParameters)
     }
 }
 
@@ -539,9 +561,7 @@ private class RandomNationPickerPopup(
         update()
         pack()
 
-        val closeButton = "OtherIcons/Close".toImageButton(Color.FIREBRICK)
-        closeButton.onActivation { close() }
-        closeButton.keyShortcuts.add(KeyCharAndCode.BACK)
+        val closeButton = getCloseButton(buttonsCircleSize, buttonsIconSize, buttonsBackColor, Color.FIREBRICK) { close() }
         closeButton.setPosition(buttonsOffsetFromEdge, buttonsOffsetFromEdge, Align.bottomLeft)
         innerTable.addActor(closeButton)
         clickBehindToClose = true

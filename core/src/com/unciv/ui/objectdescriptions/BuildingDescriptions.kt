@@ -20,7 +20,7 @@ object BuildingDescriptions {
     // To stay consistent, all take the Building as normal parameter instead.
 
     /** Used for AlertType.WonderBuilt, and as sub-text in Nation and Tech descriptions */
-    fun getShortDescription(building: Building, multiline: Boolean = false): String = building.run {
+    fun getShortDescription(building: Building, multiline: Boolean = false, uniqueInclusionFilter: ((Unique) -> Boolean)? = null): String = building.run {
         val infoList = mutableListOf<String>()
         this.clone().toString().also { if (it.isNotEmpty()) infoList += it }
         for ((key, value) in getStatPercentageBonuses(null))
@@ -30,7 +30,7 @@ object BuildingDescriptions {
             infoList += "Requires worked [" + requiredNearbyImprovedResources!!.joinToString("/") { it.tr() } + "] near city"
         if (uniques.isNotEmpty()) {
             if (replacementTextForUniques.isNotEmpty()) infoList += replacementTextForUniques
-            else infoList += getUniquesStringsWithoutDisablers()
+            else infoList += getUniquesStringsWithoutDisablers(uniqueInclusionFilter)
         }
         if (cityStrength != 0) infoList += "{City strength} +$cityStrength"
         if (cityHealth != 0) infoList += "{City health} +$cityHealth"
@@ -45,12 +45,11 @@ object BuildingDescriptions {
         val isFree = city.civ.civConstructions.hasFreeBuilding(city, this)
         if (uniqueTo != null) translatedLines += if (replaces == null) "Unique to [$uniqueTo]".tr()
         else "Unique to [$uniqueTo], replaces [$replaces]".tr()
-        val missingUnique = getMatchingUniques(UniqueType.RequiresBuildingInAllCities).firstOrNull()
         if (isWonder) translatedLines += "Wonder".tr()
         if (isNationalWonder) translatedLines += "National Wonder".tr()
         if (!isFree) {
             for ((resourceName, amount) in getResourceRequirementsPerTurn(StateForConditionals(city.civ, city))) {
-                val available = city.getResourceAmount(resourceName)
+                val available = city.getAvailableResourceAmount(resourceName)
                 val resource = city.getRuleset().tileResources[resourceName] ?: continue
                 val consumesString = resourceName.getConsumesAmountString(amount, resource.isStockpiled())
 
@@ -59,21 +58,9 @@ object BuildingDescriptions {
             }
         }
 
-        // Inefficient in theory. In practice, buildings seem to have only a small handful of uniques.
-        val missingCities = if (missingUnique != null)
-        // TODO: Unify with rejection reasons?
-            city.civ.cities.filterNot {
-                it.isPuppet
-                    || it.cityConstructions.containsBuildingOrEquivalent(missingUnique.params[0])
-            }
-        else listOf()
         if (uniques.isNotEmpty()) {
             if (replacementTextForUniques.isNotEmpty()) translatedLines += replacementTextForUniques.tr()
-            else translatedLines += getUniquesStringsWithoutDisablers(
-                filterUniques = if (missingCities.isEmpty()) null
-                else { unique -> !unique.isOfType(UniqueType.RequiresBuildingInAllCities) }
-                // Filter out the "Requires a [] in all cities" unique if any cities are still missing the required building, since in that case the list of cities will be appended at the end.
-            ).map { it.tr() }
+            else translatedLines += getUniquesStringsWithoutDisablers().map { it.tr() }
         }
         if (!stats.isEmpty())
             translatedLines += stats.toString()
@@ -93,14 +80,36 @@ object BuildingDescriptions {
         if (cityStrength != 0) translatedLines += "{City strength} +$cityStrength".tr()
         if (cityHealth != 0) translatedLines += "{City health} +$cityHealth".tr()
         if (maintenance != 0 && !isFree) translatedLines += "{Maintenance cost}: $maintenance {Gold}".tr()
-        if (showAdditionalInfo && missingCities.isNotEmpty()) {
-            // Could be red. But IMO that should be done by enabling GDX's ColorMarkupLanguage globally instead of adding a separate label.
-            translatedLines += "\n" +
-                "[${city.civ.getEquivalentBuilding(missingUnique!!.params[0])}] required:".tr() +
-                " " + missingCities.joinToString(", ") { it.name.tr(hideIcons = true) }
-            // Can't nest square bracket placeholders inside curlies, and don't see any way to define wildcard placeholders. So run translation explicitly on base text.
-        }
+        if (showAdditionalInfo) additionalDescription(building, city, translatedLines)
         return translatedLines.joinToString("\n").trim()
+    }
+
+    fun additionalDescription (building: Building, city: City, lines: ArrayList<String>) {
+        // Inefficient in theory. In practice, buildings seem to have only a small handful of uniques.
+        for (unique in building.uniqueObjects) {
+            if (unique.type == UniqueType.RequiresBuildingInAllCities) {
+                missingCityText(unique.params[0], city, "non-[Puppeted]", lines)
+            }
+
+            else if (unique.type == UniqueType.OnlyAvailable || unique.type == UniqueType.CanOnlyBeBuiltWhen)
+                for (conditional in unique.conditionals) {
+                    if (conditional.type == UniqueType.ConditionalBuildingBuiltAll) {
+                        missingCityText(conditional.params[0], city, conditional.params[1], lines)
+                    }
+                }
+        }
+    }
+
+    // TODO: Unify with rejection reasons?
+    fun missingCityText (building: String, city: City, filter: String, lines: ArrayList<String>) {
+        val missingCities = city.civ.cities.filter {
+            it.matchesFilter(filter) && !it.cityConstructions.containsBuildingOrEquivalent(building)
+        }
+        // Could be red. But IMO that should be done by enabling GDX's ColorMarkupLanguage globally instead of adding a separate label.
+        if (missingCities.isNotEmpty()) lines += "\n" +
+            "[${city.civ.getEquivalentBuilding(building)}] required:".tr() +
+            " " + missingCities.joinToString(", ") { it.name.tr(hideIcons = true) }
+        // Can't nest square bracket placeholders inside curlies, and don't see any way to define wildcard placeholders. So run translation explicitly on base text.
     }
 
     /**
@@ -118,6 +127,11 @@ object BuildingDescriptions {
         for ((key, value) in replacementBuilding)
             if (value != originalBuilding[key])
                 yield(FormattedLine( key.name.tr() + " " +"[${value.toInt()}] vs [${originalBuilding[key].toInt()}]".tr(), indent=1))
+
+        val originalStatBonus = originalBuilding.getStatPercentageBonuses(null)
+        for ((key, value) in replacementBuilding.getStatPercentageBonuses(null))
+            if (value != originalStatBonus[key])
+                yield(FormattedLine("[${value.toInt()}]% ".tr() + key.name.tr() + " vs [${originalStatBonus[key].toInt()}]% ".tr() + key.name.tr(), indent = 1))
 
         if (replacementBuilding.maintenance != originalBuilding.maintenance)
             yield(FormattedLine("{Maintenance} ".tr() + "[${replacementBuilding.maintenance}] vs [${originalBuilding.maintenance}]".tr(), indent=1))
@@ -254,7 +268,7 @@ object BuildingDescriptions {
     private fun Building.getUniquesStrings(filterUniques: ((Unique) -> Boolean)? = null) = sequence {
         val tileBonusHashmap = HashMap<String, ArrayList<String>>()
         for (unique in uniqueObjects) if (filterUniques == null || filterUniques(unique)) when {
-            unique.isOfType(UniqueType.StatsFromTiles) && unique.params[2] == "in this city" -> {
+            unique.type == UniqueType.StatsFromTiles && unique.params[2] == "in this city" -> {
                 val stats = unique.params[0]
                 if (!tileBonusHashmap.containsKey(stats)) tileBonusHashmap[stats] = ArrayList()
                 tileBonusHashmap[stats]!!.add(unique.params[1])
@@ -273,7 +287,7 @@ object BuildingDescriptions {
     /**
      * @param filterUniques If provided, include only uniques for which this function returns true.
      */
-    private fun Building.getUniquesStringsWithoutDisablers(filterUniques: ((Unique) -> Boolean)? = null) = getUniquesStrings {
+    private fun Building.getUniquesStringsWithoutDisablers(filterUniques: ((Unique) -> Boolean)? = null): Sequence<String> = getUniquesStrings {
         !it.isHiddenToUsers()
             && (filterUniques?.invoke(it) ?: true)
     }

@@ -2,6 +2,7 @@ package com.unciv.ui.screens.worldscreen.status
 
 import com.badlogic.gdx.graphics.Color
 import com.unciv.Constants
+import com.unciv.UncivGame
 import com.unciv.logic.civilization.managers.ReligionManager
 import com.unciv.logic.civilization.managers.ReligionState
 import com.unciv.models.Counter
@@ -10,6 +11,7 @@ import com.unciv.ui.components.extensions.disable
 import com.unciv.ui.components.extensions.enable
 import com.unciv.ui.popups.ConfirmPopup
 import com.unciv.ui.screens.cityscreen.CityScreen
+import com.unciv.ui.screens.overviewscreen.EspionageOverviewScreen
 import com.unciv.ui.screens.pickerscreens.DiplomaticVotePickerScreen
 import com.unciv.ui.screens.pickerscreens.PantheonPickerScreen
 import com.unciv.ui.screens.pickerscreens.PolicyPickerScreen
@@ -23,6 +25,12 @@ enum class NextTurnAction(protected val text: String, val color: Color) {
     Default("", Color.BLACK) {
         override val icon get() = null
         override fun isChoice(worldScreen: WorldScreen) = false
+    },
+    AutoPlay("AutoPlay", Color.WHITE) {
+        override fun isChoice(worldScreen: WorldScreen) =
+            worldScreen.autoPlay.isAutoPlaying()
+        override fun action(worldScreen: WorldScreen) =
+            worldScreen.autoPlay.stopAutoPlay()
     },
     Working(Constants.working, Color.GRAY) {
         override fun isChoice(worldScreen: WorldScreen) =
@@ -58,6 +66,14 @@ enum class NextTurnAction(protected val text: String, val color: Color) {
         override fun action(worldScreen: WorldScreen) {
             worldScreen.game.pushScreen(PolicyPickerScreen(worldScreen.selectedCiv, worldScreen.canChangeState))
             worldScreen.viewingCiv.policies.shouldOpenPolicyPicker = false
+        }
+    },
+    MoveSpies("Move Spies", Color.WHITE) {
+        override fun isChoice(worldScreen: WorldScreen) =
+                worldScreen.gameInfo.isEspionageEnabled() && worldScreen.viewingCiv.espionageManager.shouldShowMoveSpies()
+        override fun action(worldScreen: WorldScreen) {
+            worldScreen.game.pushScreen(EspionageOverviewScreen(worldScreen.selectedCiv, worldScreen))
+            worldScreen.viewingCiv.espionageManager.dismissedShouldMoveSpies = true
         }
     },
     FoundPantheon("Found Pantheon", Color.valueOf(BeliefType.Pantheon.color)) {
@@ -120,7 +136,7 @@ enum class NextTurnAction(protected val text: String, val color: Color) {
     },
 
     ;
-    open val icon: String? get() = "NotificationIcons/$name"
+    open val icon: String? get() = if (text != "AutoPlay") "NotificationIcons/$name" else "NotificationIcons/Working"
     open fun getText(worldScreen: WorldScreen) = text
     abstract fun isChoice(worldScreen: WorldScreen): Boolean
     open fun action(worldScreen: WorldScreen) {}

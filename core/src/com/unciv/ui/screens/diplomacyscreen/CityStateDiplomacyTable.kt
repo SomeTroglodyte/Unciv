@@ -18,7 +18,6 @@ import com.unciv.logic.civilization.managers.AssignedQuest
 import com.unciv.logic.trade.TradeLogic
 import com.unciv.logic.trade.TradeOffer
 import com.unciv.logic.trade.TradeType
-import com.unciv.models.ruleset.ModOptionsConstants
 import com.unciv.models.ruleset.Quest
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.UniqueType
@@ -33,7 +32,6 @@ import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.ColorMarkupLabel
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.ConfirmPopup
-import com.unciv.ui.screens.civilopediascreen.CivilopediaScreen
 
 class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
     val viewingCiv = diplomacyScreen.viewingCiv
@@ -70,19 +68,19 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
         if (diplomacyScreen.isNotPlayersTurn() || viewingCiv.isAtWarWith(otherCiv)) demandTributeButton.disable()
 
         val diplomacyManager = viewingCiv.getDiplomacyManager(otherCiv)
-        if (!viewingCiv.gameInfo.ruleset.modOptions.uniques.contains(ModOptionsConstants.diplomaticRelationshipsCannotChange)) {
+        if (!viewingCiv.gameInfo.ruleset.modOptions.hasUnique(UniqueType.DiplomaticRelationshipsCannotChange)) {
             if (viewingCiv.isAtWarWith(otherCiv))
                 diplomacyTable.add(getNegotiatePeaceCityStateButton(otherCiv, diplomacyManager)).row()
             else diplomacyTable.add(diplomacyScreen.getDeclareWarButton(diplomacyManager, otherCiv)).row()
         }
 
-        if (otherCiv.cities.isNotEmpty() && otherCiv.getCapital() != null && viewingCiv.hasExplored(otherCiv.getCapital()!!.getCenterTile()))
+        if (otherCiv.getCapital() != null && viewingCiv.hasExplored(otherCiv.getCapital()!!.getCenterTile()))
             diplomacyTable.add(diplomacyScreen.getGoToOnMapButton(otherCiv)).row()
 
         val diplomaticMarriageButton = getDiplomaticMarriageButton(otherCiv)
         if (diplomaticMarriageButton != null) diplomacyTable.add(diplomaticMarriageButton).row()
 
-        for (assignedQuest in otherCiv.questManager.assignedQuests.filter { it.assignee == viewingCiv.civName }) {
+        for (assignedQuest in otherCiv.questManager.getAssignedQuestsFor(viewingCiv.civName)) {
             diplomacyTable.addSeparator()
             diplomacyTable.add(getQuestTable(assignedQuest)).row()
         }
@@ -122,7 +120,7 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
                 resourcesTable.add(wrapper).padRight(20f)
                 wrapper.addTooltip(name, 18f)
                 wrapper.onClick {
-                    UncivGame.Current.pushScreen(CivilopediaScreen(UncivGame.Current.gameInfo!!.ruleset, link = "Resource/$name"))
+                    diplomacyScreen.openCivilopedia(supplyList.resource.makeLink())
                 }
             }
             diplomacyTable.add(resourcesTable).row()
@@ -167,14 +165,6 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
         }
         diplomacyTable.row().padTop(15f)
 
-        var friendBonusText = "When Friends:".tr()+"\n"
-        val friendBonusObjects = viewingCiv.cityStateFunctions.getCityStateBonuses(otherCiv.cityStateType, RelationshipLevel.Friend)
-        friendBonusText += friendBonusObjects.joinToString(separator = "\n") { it.text.tr() }
-
-        var allyBonusText = "When Allies:".tr()+"\n"
-        val allyBonusObjects = viewingCiv.cityStateFunctions.getCityStateBonuses(otherCiv.cityStateType, RelationshipLevel.Ally)
-        allyBonusText += allyBonusObjects.joinToString(separator = "\n") { it.text.tr() }
-
         val relationLevel = otherCivDiplomacyManager.relationshipIgnoreAfraid()
         if (relationLevel >= RelationshipLevel.Friend) {
             // RelationshipChange = Ally -> Friend or Friend -> Favorable
@@ -184,15 +174,21 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
                     .row()
         }
 
-        val friendBonusLabelColor = if (relationLevel == RelationshipLevel.Friend) Color.GREEN else Color.GRAY
-        val friendBonusLabel = ColorMarkupLabel(friendBonusText, friendBonusLabelColor)
-            .apply { setAlignment(Align.center) }
-        diplomacyTable.add(friendBonusLabel).row()
-
-        val allyBonusLabelColor = if (relationLevel == RelationshipLevel.Ally) Color.GREEN else Color.GRAY
-        val allyBonusLabel = ColorMarkupLabel(allyBonusText, allyBonusLabelColor)
-            .apply { setAlignment(Align.center) }
-        diplomacyTable.add(allyBonusLabel).row()
+        fun getBonusText(header: String, level: RelationshipLevel): String {
+            val bonuses = viewingCiv.cityStateFunctions
+                .getCityStateBonuses(otherCiv.cityStateType, level)
+                .filterNot { it.isHiddenToUsers() }
+            if (bonuses.none()) return ""
+            return (sequenceOf(header) + bonuses.map { it.text }).joinToString(separator = "\n") { it.tr() }
+        }
+        fun addBonusLabel(header: String, bonusLevel: RelationshipLevel, relationLevel: RelationshipLevel) {
+            val bonusLabelColor = if (relationLevel == bonusLevel) Color.GREEN else Color.GRAY
+            val bonusLabel = ColorMarkupLabel(getBonusText(header, bonusLevel), bonusLabelColor)
+                .apply { setAlignment(Align.center) }
+            diplomacyTable.add(bonusLabel).row()
+        }
+        addBonusLabel("When Friends:", RelationshipLevel.Friend, relationLevel)
+        addBonusLabel("When Allies:", RelationshipLevel.Ally, relationLevel)
 
         if (otherCiv.cityStateUniqueUnit != null) {
             val unitName = otherCiv.cityStateUniqueUnit
@@ -467,8 +463,8 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
         if (quest.duration > 0)
             questTable.add("[${remainingTurns}] turns remaining".toLabel()).row()
         if (quest.isGlobal()) {
-            val leaderString = viewingCiv.gameInfo.getCivilization(assignedQuest.assigner).questManager.getLeaderStringForQuest(assignedQuest.questName)
-            if (leaderString != "")
+            val leaderString = viewingCiv.gameInfo.getCivilization(assignedQuest.assigner).questManager.getScoreStringForGlobalQuest(assignedQuest)
+            if (leaderString.isNotEmpty())
                 questTable.add(leaderString.toLabel()).row()
         }
 

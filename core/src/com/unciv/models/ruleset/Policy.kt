@@ -1,5 +1,7 @@
 package com.unciv.models.ruleset
 
+import com.unciv.Constants
+import com.unciv.logic.MultiFilter
 import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueTarget
 import com.unciv.models.ruleset.unique.UniqueType
@@ -33,13 +35,26 @@ open class Policy : RulesetObject() {
         fun isBranchCompleteByName(name: String) = name.endsWith(branchCompleteSuffix)
     }
 
+    fun matchesFilter(filter: String): Boolean {
+        return MultiFilter.multiFilter(filter, ::matchesSingleFilter)
+    }
+    fun matchesSingleFilter(filter: String): Boolean {
+        return when(filter) {
+            in Constants.all -> true
+            name -> true
+            "[${branch.name}] branch" -> true
+            in uniques -> true
+            else -> false
+        }
+    }
+
     /** Used in PolicyPickerScreen to display Policy properties */
     fun getDescription(): String {
         return (if (policyBranchType == PolicyBranchType.Member) name.tr() + "\n" else "") +
             uniqueObjects.filterNot {
                 it.isHiddenToUsers()
-                    || it.isOfType(UniqueType.OnlyAvailableWhen)
-                    || it.isOfType(UniqueType.OneTimeGlobalAlert)
+                    || it.type == UniqueType.OnlyAvailable
+                    || it.type == UniqueType.OneTimeGlobalAlert
             }
             .joinToString("\n") { "• ${it.text.tr()}" }
     }
@@ -91,9 +106,11 @@ open class Policy : RulesetObject() {
         }
 
         fun isEnabledByPolicy(rulesetObject: IRulesetObject) =
-                rulesetObject.getMatchingUniques(UniqueType.OnlyAvailableWhen, StateForConditionals.IgnoreConditionals).any { it.conditionals.any {
+                rulesetObject.getMatchingUniques(UniqueType.OnlyAvailable, StateForConditionals.IgnoreConditionals).any { it.conditionals.any {
                     it.type == UniqueType.ConditionalAfterPolicyOrBelief && it.params[0] == name
-                } }
+                } } || rulesetObject.getMatchingUniques(UniqueType.Unavailable).any { it.conditionals.any {
+                    it.type == UniqueType.ConditionalBeforePolicyOrBelief && it.params[0] == name
+                }}
 
         val enabledBuildings = ruleset.buildings.values.filter { isEnabledByPolicy(it) }
         val enabledUnits = ruleset.units.values.filter { isEnabledByPolicy(it) }
@@ -108,8 +125,10 @@ open class Policy : RulesetObject() {
 
 
         fun isDisabledByPolicy(rulesetObject: IRulesetObject) =
-                rulesetObject.getMatchingUniques(UniqueType.OnlyAvailableWhen, StateForConditionals.IgnoreConditionals).any { it.conditionals.any {
+                rulesetObject.getMatchingUniques(UniqueType.OnlyAvailable, StateForConditionals.IgnoreConditionals).any { it.conditionals.any {
                     it.type == UniqueType.ConditionalBeforePolicyOrBelief && it.params[0] == name
+                } } || rulesetObject.getMatchingUniques(UniqueType.Unavailable).any { it.conditionals.any {
+                    it.type == UniqueType.ConditionalAfterPolicyOrBelief && it.params[0] == name
                 } }
 
 

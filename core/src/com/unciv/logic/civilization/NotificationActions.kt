@@ -12,6 +12,8 @@ import com.unciv.ui.screens.civilopediascreen.CivilopediaScreen
 import com.unciv.ui.screens.diplomacyscreen.DiplomacyScreen
 import com.unciv.ui.screens.overviewscreen.EmpireOverviewCategories
 import com.unciv.ui.screens.overviewscreen.EmpireOverviewScreen
+import com.unciv.ui.screens.overviewscreen.EspionageOverviewScreen
+import com.unciv.ui.screens.pickerscreens.PolicyPickerScreen
 import com.unciv.ui.screens.pickerscreens.PromotionPickerScreen
 import com.unciv.ui.screens.pickerscreens.TechPickerScreen
 import com.unciv.ui.screens.worldscreen.WorldScreen
@@ -59,7 +61,7 @@ class LocationAction(internal val location: Vector2 = Vector2.Zero) : Notificati
 class TechAction(private val techName: String = "") : NotificationAction {
     override fun execute(worldScreen: WorldScreen) {
         val tech = worldScreen.gameInfo.ruleset.technologies[techName]
-        worldScreen.game.pushScreen(TechPickerScreen(worldScreen.viewingCiv, tech))
+        worldScreen.game.pushScreen(TechPickerScreen(worldScreen.selectedCiv, tech))
     }
 }
 
@@ -79,11 +81,24 @@ class CityAction(private val city: Vector2 = Vector2.Zero) : NotificationAction 
 /** enter diplomacy screen */
 class DiplomacyAction(
     private val otherCivName: String = "",
-    private val showTrade: Boolean = false
+    private var showTrade: Boolean = false
 ) : NotificationAction {
     override fun execute(worldScreen: WorldScreen) {
+        val currentCiv = worldScreen.selectedCiv
         val otherCiv = worldScreen.gameInfo.getCivilization(otherCivName)
-        worldScreen.game.pushScreen(DiplomacyScreen(worldScreen.viewingCiv, otherCiv, showTrade = showTrade))
+
+        if (showTrade && otherCiv == currentCiv)
+            // Because TradeTable will set up otherCiv against that one,
+            // not the one we pass below, and two equal civs will crash - can't look up a DiplomacyManager.
+            return
+        // We should not be able to trade with city-states
+        if (showTrade && (otherCiv.isCityState() || currentCiv.isCityState()))
+            showTrade = false
+
+        if (showTrade && currentCiv.isAtWarWith(otherCiv))
+            showTrade = false  // Can't trade right now
+
+        worldScreen.game.pushScreen(DiplomacyScreen(currentCiv, otherCiv, showTrade = showTrade))
     }
 }
 
@@ -118,7 +133,7 @@ class MapUnitAction(private val location: Vector2 = Vector2.Zero) : Notification
 /** A notification action that shows a Civilopedia entry, e.g. for a Wonder. */
 class CivilopediaAction(private val link: String = "") : NotificationAction {
     override fun execute(worldScreen: WorldScreen) {
-        worldScreen.game.pushScreen(CivilopediaScreen(worldScreen.gameInfo.ruleset, link = link))
+        worldScreen.openCivilopedia(link)
     }
 }
 
@@ -142,6 +157,27 @@ class OverviewAction(
     }
 }
 
+/** Open policy picker, optionally preselecting [select] (how or if at all that works for branches is [PolicyPickerScreen]'s business) */
+class PolicyAction(
+    private val select: String? = null
+) : NotificationAction {
+    override fun execute(worldScreen: WorldScreen) {
+        worldScreen.game.pushScreen(PolicyPickerScreen(worldScreen.selectedCiv, worldScreen.canChangeState, select))
+    }
+}
+
+/** Open [EspionageOverviewScreen] */
+class EspionageAction : NotificationAction {
+    override fun execute(worldScreen: WorldScreen) {
+        worldScreen.game.pushScreen(EspionageOverviewScreen(worldScreen.selectedCiv, worldScreen))
+    }
+    companion object {
+        fun withLocation(location: Vector2?): Sequence<NotificationAction> =
+            LocationAction(location) + EspionageAction()
+    }
+}
+
+
 @Suppress("PrivatePropertyName")  // These names *must* match their class name, see below
 internal class NotificationActionsDeserializer {
     /* This exists as trick to leverage readFields for Json deserialization.
@@ -163,12 +199,15 @@ internal class NotificationActionsDeserializer {
     private val CivilopediaAction: CivilopediaAction? = null
     private val PromoteUnitAction: PromoteUnitAction? = null
     private val OverviewAction: OverviewAction? = null
+    private val PolicyAction: PolicyAction? = null
+    private val EspionageAction: EspionageAction? = null
 
     fun read(json: Json, jsonData: JsonValue): List<NotificationAction> {
         json.readFields(this, jsonData)
         return listOfNotNull(
             LocationAction, TechAction, CityAction, DiplomacyAction, MayaLongCountAction,
-            MapUnitAction, CivilopediaAction, PromoteUnitAction, OverviewAction
+            MapUnitAction, CivilopediaAction, PromoteUnitAction, OverviewAction, PolicyAction,
+            EspionageAction
         )
     }
 }

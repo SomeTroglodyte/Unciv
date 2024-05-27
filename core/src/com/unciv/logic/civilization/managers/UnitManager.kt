@@ -5,33 +5,49 @@ import com.unciv.UncivGame
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.NotificationCategory
+import com.unciv.logic.civilization.transients.CivInfoTransientCache
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 
-class UnitManager(val civInfo:Civilization) {
+class UnitManager(val civInfo: Civilization) {
 
     /**
-     * We never add or remove from here directly, could cause comodification problems.
-     * Instead, we create a copy list with the change, and replace this list.
-     * The other solution, casting toList() every "get", has a performance cost
+     *  All units of [civInfo], _ordered_.
+     *  Collection order and [nextPotentiallyDueAt] determine activation order when using "Next unit".
+     *
+     *  When loading a save, this is entirely rebuilt from Tile.*Unit.
+     *  * GameInfo.setTransients -> TileMap.setTransients -> Tile.setUnitTransients -> MapUnit.assignOwner -> [addUnit] (the MapUnit overload)
+     *
+     *  We never add or remove from here directly, could cause comodification problems.
+     *  Instead, we create a copy list with the change, and replace this list.
+     *  The other solution, casting toList() every "get", has a performance cost
      */
-    @Transient
     private var unitList = listOf<MapUnit>()
 
     /**
-     * Index in the unit list above of the unit that is potentially due and is next up for button "Next unit".
+     * Index in [unitList] of the [unit][MapUnit] that is potentially [due][MapUnit.due] and is next up for button "Next unit".
      */
-    @Transient
     private var nextPotentiallyDueAt = 0
 
+    /** Creates a new [MapUnit] and places it on the map.
+     *  @param  unitName The [BaseUnit] name to create a MapUnit instance of - auto-mapped to a nation equivalent if one exists
+     *  @param  city     The City to place the new unit in or near
+     *  @return          The new unit or `null` if unsuccessful (invalid unitName, no tile found where it could be placed, or civ has no cities)
+     */
     fun addUnit(unitName: String, city: City? = null): MapUnit? {
         val unit = civInfo.gameInfo.ruleset.units[unitName] ?: return null
         return addUnit(unit, city)
     }
 
+    /** Creates a new [MapUnit] and places it on the map.
+     *  @param  baseUnit The [BaseUnit] to create a MapUnit instance of - auto-mapped to a nation equivalent if one exists
+     *  @param  city     The City to place the new unit in or near
+     *  @return          The new unit or `null` if unsuccessful (no tile found where it could be placed, or civ has no cities)
+     */
     fun addUnit(baseUnit: BaseUnit, city: City? = null): MapUnit? {
         if (civInfo.cities.isEmpty()) return null
 
@@ -54,7 +70,6 @@ class UnitManager(val civInfo:Civilization) {
                 || civInfo.religionManager.religion?.isMajorReligion() == false) {
                 placedUnit.religion = cityToAddTo.religion.getMajorityReligionName()
             }
-            placedUnit.setupAbilityUses(cityToAddTo)  // Seting up abilies a second time in case the city or religion has a different ability count
         }
 
         return placedUnit
@@ -81,15 +96,15 @@ class UnitManager(val civInfo:Civilization) {
         if (unit != null) {
             val triggerNotificationText = "due to gaining a [${unit.name}]"
             for (unique in unit.getUniques())
-                if (!unique.hasTriggerConditional())
-                    UniqueTriggerActivation.triggerUnitwideUnique(unique, unit, triggerNotificationText = triggerNotificationText)
+                if (!unique.hasTriggerConditional() && unique.conditionalsApply(StateForConditionals(civInfo, unit = unit)))
+                    UniqueTriggerActivation.triggerUnique(unique, unit, triggerNotificationText = triggerNotificationText)
             for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponGainingUnit))
-                if (unique.conditionals.any { it.isOfType(UniqueType.TriggerUponGainingUnit) &&
+                if (unique.conditionals.any { it.type == UniqueType.TriggerUponGainingUnit &&
                         unit.matchesFilter(it.params[0]) })
-                    UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo, triggerNotificationText = triggerNotificationText)
+                    UniqueTriggerActivation.triggerUnique(unique, unit, triggerNotificationText = triggerNotificationText)
             if (unit.getResourceRequirementsPerTurn().isNotEmpty())
                 civInfo.cache.updateCivResources()
-                
+
             for (unique in civInfo.getMatchingUniques(UniqueType.LandUnitsCrossTerrainAfterUnitGained)) {
                 if (unit.matchesFilter(unique.params[1])) {
                     civInfo.passThroughImpassableUnlocked = true    // Update the cached Boolean
@@ -99,7 +114,6 @@ class UnitManager(val civInfo:Civilization) {
 
             if (unit.hasUnique(UniqueType.ReligiousUnit) && civInfo.gameInfo.isReligionEnabled()) {
                 unit.religion = civInfo.religionManager.religion?.name
-                unit.setupAbilityUses()
             }
         }
         return unit
@@ -112,6 +126,11 @@ class UnitManager(val civInfo:Civilization) {
     // 'nextPotentiallyDueAt' unit is first here.
     private fun getCivUnitsStartingAtNextDue(): Sequence<MapUnit> = sequenceOf(unitList.subList(nextPotentiallyDueAt, unitList.size) + unitList.subList(0, nextPotentiallyDueAt)).flatten()
 
+    /** Assigns an existing [mapUnit] to this manager.
+     *
+     *  Used during load game via setTransients to regenerate a Civilization's list from the serialized Tile fields.
+     *  @param updateCivInfo When `true`, calls [updateStatsForNextTurn][Civilization.updateStatsForNextTurn] and possibly [updateCivResources][CivInfoTransientCache]
+     */
     fun addUnit(mapUnit: MapUnit, updateCivInfo: Boolean = true) {
         // Since we create a new list anyway (otherwise some concurrent modification
         // exception will happen), also rearrange existing units so that

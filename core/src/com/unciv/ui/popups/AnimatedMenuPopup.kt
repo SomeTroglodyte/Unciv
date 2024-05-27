@@ -1,7 +1,6 @@
 package com.unciv.ui.popups
 
 import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.g2d.NinePatch
 import com.badlogic.gdx.math.Interpolation
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.Actor
@@ -10,14 +9,13 @@ import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.actions.Actions
 import com.badlogic.gdx.scenes.scene2d.ui.Container
 import com.badlogic.gdx.scenes.scene2d.ui.Table
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable
+import com.unciv.ui.components.SmallButtonStyle
 import com.unciv.ui.components.extensions.toTextButton
 import com.unciv.ui.components.input.KeyCharAndCode
 import com.unciv.ui.components.input.KeyboardBinding
 import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
-import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.utils.Concurrency
 
@@ -26,7 +24,8 @@ import com.unciv.utils.Concurrency
  *
  *  You must provide content by overriding [createContentTable] - see its doc.
  *
- *  The Popup opens automatically once created. Meant to be used for small menus.
+ *  The Popup opens automatically once created.
+ *  **Meant to be used for small menus.** - otherwise use [ScrollableAnimatedMenuPopup].
  *  No default close button - recommended to simply use "click-behind".
  *
  *  The "click-behind" semi-transparent covering of the rest of the stage is much darker than a normal
@@ -98,11 +97,17 @@ open class AnimatedMenuPopup(
         container.setScale(0.05f)
         container.color.a = 0f
 
-        open(true)  // this only does the screen-covering "click-behind" portion
+        open(true)  // this only does the screen-covering "click-behind" portion - and ensures this.stage is set
 
+        // Note that coerceIn throws if min>max, so we defend against newInnerTable being bigger than the stage,
+        // and padding helps the rounded edges to look more natural:
+        val paddedHalfWidth = newInnerTable.width / 2 + 2f
+        val paddedHalfHeight = newInnerTable.height / 2 + 2f
         container.setPosition(
-            position.x.coerceAtMost(stage.width - newInnerTable.width / 2),
-            position.y.coerceAtLeast(newInnerTable.height / 2)
+            if (paddedHalfWidth * 2 > stage.width) stage.width / 2
+            else position.x.coerceIn(paddedHalfWidth, stage.width - paddedHalfWidth),
+            if (paddedHalfHeight * 2 > stage.height) stage.height / 2
+            else position.y.coerceIn(paddedHalfHeight, stage.height - paddedHalfHeight)
         )
         super.addActor(container)
 
@@ -156,40 +161,4 @@ open class AnimatedMenuPopup(
                 close()
             }
         }
-
-    //todo Reused in SpecialistAllocationTable - refactor to another package
-    class SmallButtonStyle : TextButton.TextButtonStyle(BaseScreen.skin[TextButton.TextButtonStyle::class.java]) {
-        /** Modify NinePatch geometry so the roundedEdgeRectangleMidShape button is 38f high instead of 48f,
-         *  Otherwise this excercise would be futile - normal roundedEdgeRectangleShape based buttons are 50f high.
-         */
-        private fun NinePatchDrawable.reduce(): NinePatchDrawable {
-            val patch = NinePatch(this.patch)
-            patch.padTop = 10f
-            patch.padBottom = 10f
-            patch.topHeight = 10f
-            patch.bottomHeight = 10f
-            return NinePatchDrawable(this).also { it.patch = patch }
-        }
-
-        init {
-            val upColor = BaseScreen.skin.getColor("color")
-            val downColor = BaseScreen.skin.getColor("pressed")
-            val overColor = BaseScreen.skin.getColor("highlight")
-            val disabledColor = BaseScreen.skin.getColor("disabled")
-            // UiElementDocsWriter inspects source, which is why this isn't prettified better
-            val shape = BaseScreen.run {
-                // Let's use _one_ skinnable background lookup but with different tints
-                val skinned = skinStrings.getUiBackground("AnimatedMenu/Button", skinStrings.roundedEdgeRectangleMidShape)
-                // Reduce height only if not skinned
-                val default = ImageGetter.getNinePatch(skinStrings.roundedEdgeRectangleMidShape)
-                if (skinned === default) default.reduce() else skinned
-            }
-            // Now get the tinted variants
-            up = shape.tint(upColor)
-            down = shape.tint(downColor)
-            over = shape.tint(overColor)
-            disabled = shape.tint(disabledColor)
-            disabledFontColor = Color.GRAY
-        }
-    }
 }

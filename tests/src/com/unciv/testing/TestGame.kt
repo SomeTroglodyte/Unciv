@@ -26,6 +26,7 @@ import com.unciv.models.ruleset.Specialist
 import com.unciv.models.ruleset.Speed
 import com.unciv.models.ruleset.nation.Nation
 import com.unciv.models.ruleset.tile.TileImprovement
+import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.ruleset.unit.Promotion
@@ -132,7 +133,7 @@ class TestGame {
         val civInfo = Civilization()
         civInfo.nation = nation
         civInfo.gameInfo = gameInfo
-        civInfo.civName = nation.name
+        civInfo.setNameForUnitTests(nation.name)
         if (isPlayer) civInfo.playerType = PlayerType.Human
         civInfo.setTransients()
 
@@ -183,7 +184,10 @@ class TestGame {
         baseUnit.ruleset = ruleset
         val mapUnit = baseUnit.getMapUnit(civInfo)
         civInfo.units.addUnit(mapUnit)
-        if (tile!=null) mapUnit.putInTile(tile)
+        if (tile!=null) {
+            mapUnit.putInTile(tile)
+            mapUnit.currentMovement = mapUnit.getMaxMovement().toFloat()
+        }
         return mapUnit
     }
 
@@ -240,6 +244,8 @@ class TestGame {
         createRulesetObject(ruleset.beliefs, *uniques) { Belief(type) }
     fun createBuilding(vararg uniques: String) =
         createRulesetObject(ruleset.buildings, *uniques) { Building() }
+    fun createResource(vararg uniques: String) =
+        createRulesetObject(ruleset.tileResources, *uniques) { TileResource() }
 
     fun createWonder(vararg uniques: String): Building {
         val createdBuilding = createBuilding(*uniques)

@@ -11,17 +11,14 @@ import com.unciv.UncivGame
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.unique.IHasUniques
-import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.INamed
 import com.unciv.models.translations.tr
-import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.colorFromRGB
+import com.unciv.ui.components.extensions.getCloseButton
 import com.unciv.ui.components.extensions.toImageButton
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.fonts.Fonts
-import com.unciv.ui.components.input.KeyCharAndCode
 import com.unciv.ui.components.input.KeyboardBinding
-import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.images.IconTextButton
@@ -201,24 +198,17 @@ class CivilopediaScreen(
     init {
         val imageSize = 50f
 
-        val religionEnabled = showReligionInCivilopedia(ruleset)
-        val victoryTypes = game.gameInfo?.gameParameters?.victoryTypes ?: ruleset.victories.keys
+        val religionEnabled = showReligionInCivilopedia(ruleset) // To filter the Belief Category only
 
-        fun shouldBeDisplayed(obj: IHasUniques): Boolean {
-            return when {
-                obj.hasUnique(UniqueType.HiddenFromCivilopedia) -> false
-                (!religionEnabled && obj.hasUnique(UniqueType.HiddenWithoutReligion)) -> false
-                obj.getMatchingUniques(UniqueType.HiddenWithoutVictoryType).any { !victoryTypes.contains(it.params[0]) } -> false
-                else -> true
-            }
-        }
+        // do not confuse with IConstruction.shouldBeDisplayed - that one tests all prerequisites for building
+        fun shouldBeDisplayed(obj: ICivilopediaText) =
+            obj is IHasUniques && !obj.isHiddenFromCivilopedia(game.gameInfo, ruleset)
 
         for (loopCategory in CivilopediaCategories.values()) {
-            if (loopCategory.hide) continue
             if (!religionEnabled && loopCategory == CivilopediaCategories.Belief) continue
             categoryToEntries[loopCategory] =
                 loopCategory.getCategoryIterator(ruleset, tutorialController)
-                    .filter { (it as? IHasUniques)?.let { obj -> shouldBeDisplayed(obj) } ?: true }
+                    .filter(::shouldBeDisplayed)
                     .map { CivilopediaEntry(
                         (it as INamed).name,
                         loopCategory.getImage?.invoke(it.getIconName(), imageSize),
@@ -236,8 +226,7 @@ class CivilopediaScreen(
             if (entries.isEmpty()) continue
             val icon = if (categoryKey.headerIcon.isNotEmpty()) ImageGetter.getImage(categoryKey.headerIcon) else null
             val button = IconTextButton(categoryKey.label, icon)
-            button.addTooltip(categoryKey.key)
-            button.onClick { selectCategory(categoryKey) }
+            button.onActivation(binding = categoryKey.binding) { selectCategory(categoryKey) }
             val cell = buttonTable.add(button)
             categoryToButtons[categoryKey] = CategoryButtonInfo(button, currentX, cell.prefWidth)
             currentX += cell.prefWidth + 20f
@@ -245,15 +234,12 @@ class CivilopediaScreen(
 
         buttonTable.pack()
         buttonTableScroll = ScrollPane(buttonTable)
-        buttonTableScroll.setScrollingDisabled(false, true)
+        buttonTableScroll.setScrollingDisabled(x = false, y = true)
 
         val searchButton = "OtherIcons/Search".toImageButton(imageSize - 16f, imageSize, skinStrings.skinConfig.baseColor, Color.GOLD)
-        searchButton.onActivation { searchPopup.open(true) }
-        searchButton.keyShortcuts.add(KeyboardBinding.Civilopedia)  // "hit twice to search"
+        searchButton.onActivation(binding = KeyboardBinding.PediaSearch) { searchPopup.open(true) }
 
-        val closeButton = "OtherIcons/Close".toImageButton(imageSize - 20f, imageSize, skinStrings.skinConfig.baseColor, Color.RED)
-        closeButton.onActivation { game.popScreen() }
-        closeButton.keyShortcuts.add(KeyCharAndCode.BACK)
+        val closeButton = getCloseButton(imageSize) { game.popScreen() }
 
         val topTable = Table()
         topTable.add(buttonTableScroll).growX()
@@ -292,26 +278,8 @@ class CivilopediaScreen(
             else
                 selectEntry(link, noScrollAnimation = true)
 
-        for (categoryKey in categoryToEntries.keys) {
-            globalShortcuts.add(categoryKey.key) { navigateCategories(categoryKey.key) }
-        }
-        globalShortcuts.add(Input.Keys.LEFT) {
-            val categoryKey = categoryToEntries.keys
-            val currentIndex = categoryKey.indexOf(currentCategory)
-            val targetCategory = categoryKey.elementAt(
-                (currentIndex + categoryKey.size - 1) % categoryKey.size
-            )
-            selectCategory(targetCategory)
-        }
-        globalShortcuts.add(Input.Keys.RIGHT) {
-            val categoryKey = categoryToEntries.keys
-            val currentIndex = categoryKey.indexOf(currentCategory)
-            val targetCategory = categoryKey.elementAt(
-                (currentIndex + categoryKey.size + 1) % categoryKey.size
-            )
-            selectCategory(targetCategory)
-
-        }
+        globalShortcuts.add(Input.Keys.LEFT) { navigateCategories(-1) }
+        globalShortcuts.add(Input.Keys.RIGHT) { navigateCategories(1) }
         globalShortcuts.add(Input.Keys.UP) { navigateEntries(-1) }
         globalShortcuts.add(Input.Keys.DOWN) { navigateEntries(1) }
         globalShortcuts.add(Input.Keys.PAGE_UP) { navigateEntries(-10) }
@@ -320,8 +288,11 @@ class CivilopediaScreen(
         globalShortcuts.add(Input.Keys.END) { navigateEntries(Int.MAX_VALUE) }
     }
 
-    private fun navigateCategories(key: KeyCharAndCode) {
-        selectCategory(currentCategory.nextForKey(key))
+    private fun navigateCategories(direction: Int) {
+        val categoryKeys = categoryToEntries.keys
+        val currentIndex = categoryKeys.indexOf(currentCategory)
+        val newIndex = (currentIndex + categoryKeys.size + direction) % categoryKeys.size
+        selectCategory(categoryKeys.elementAt(newIndex))
     }
 
     private fun navigateEntries(direction: Int) {
@@ -339,13 +310,16 @@ class CivilopediaScreen(
     override fun recreate(): BaseScreen = CivilopediaScreen(ruleset, currentCategory, currentEntry)
 
     companion object {
-        /** Test whether to show Religion-specific items, does not require a game to be running */
-        // Here we decide whether to show Religion in Civilopedia from Main Menu (no gameInfo loaded)
-        fun showReligionInCivilopedia(ruleset: Ruleset? = null) = when {
-            UncivGame.isCurrentInitialized() && UncivGame.Current.gameInfo != null ->
-                UncivGame.Current.gameInfo!!.isReligionEnabled()
-            ruleset != null -> ruleset.beliefs.isNotEmpty()
-            else -> true
+        /** Test whether to show Religion-specific items, does not require a game to be running
+         *  - Do not make public - use IHasUniques.isHiddenFromCivilopedia if possible!
+         */
+        private fun showReligionInCivilopedia(ruleset: Ruleset? = null): Boolean {
+            val gameInfo = UncivGame.getGameInfoOrNull()
+            return when {
+                gameInfo != null -> gameInfo.isReligionEnabled()
+                ruleset != null -> ruleset.beliefs.isNotEmpty()
+                else -> true
+            }
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.unciv.ui.objectdescriptions
 
-import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.unciv.GUI
 import com.unciv.logic.city.City
@@ -18,14 +17,13 @@ import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.getConsumesAmountString
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.images.ImageGetter
-import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.civilopediascreen.FormattedLine
 import com.unciv.ui.screens.civilopediascreen.MarkupRenderer
 
 object BaseUnitDescriptions {
 
     /** Generate short description as comma-separated string for Technology description "Units enabled" and GreatPersonPickerScreen */
-    fun getShortDescription(baseUnit: BaseUnit): String {
+    fun getShortDescription(baseUnit: BaseUnit, uniqueExclusionFilter: Unique.() -> Boolean = {false}): String {
         val infoList = mutableListOf<String>()
         if (baseUnit.strength != 0) infoList += "${baseUnit.strength}${Fonts.strength}"
         if (baseUnit.rangedStrength != 0) infoList += "${baseUnit.rangedStrength}${Fonts.rangedStrength}"
@@ -33,7 +31,7 @@ object BaseUnitDescriptions {
         for (promotion in baseUnit.promotions)
             infoList += promotion.tr()
         if (baseUnit.replacementTextForUniques != "") infoList += baseUnit.replacementTextForUniques
-        else baseUnit.uniquesToDescription(infoList)
+        else baseUnit.uniquesToDescription(infoList, uniqueExclusionFilter)
         return infoList.joinToString()
     }
 
@@ -58,7 +56,7 @@ object BaseUnitDescriptions {
         lines += "$strengthLine${baseUnit.movement}${Fonts.movement}"
 
         if (baseUnit.replacementTextForUniques != "") lines += baseUnit.replacementTextForUniques
-        else baseUnit.uniquesToDescription(lines) { isOfType(UniqueType.Unbuildable) }
+        else baseUnit.uniquesToDescription(lines) { type == UniqueType.Unbuildable }
 
         if (baseUnit.promotions.isNotEmpty()) {
             val prefix = "Free promotion${if (baseUnit.promotions.size == 1) "" else "s"}:".tr() + " "
@@ -298,7 +296,7 @@ object BaseUnitDescriptions {
         for (promotion in betterUnit.promotions.filter { it !in originalUnit.promotions }) {
             // Needs tr for **individual** translations (no bracket nesting), default separator would have extra blank
             val effects = ruleset.unitPromotions[promotion]!!.uniques
-                .joinToString(",") { it.tr() }
+                .joinToString() { it.tr() }
             yield("{$promotion} ($effects)" to "Promotion/$promotion")
         }
     }
@@ -311,8 +309,6 @@ object BaseUnitDescriptions {
         val info = sequenceOf(FormattedLine(title, color = "#FDA", icon = unitToUpgradeTo.makeLink(), header = 5)) +
             getDifferences(ruleset, unitUpgrading, unitToUpgradeTo)
                 .map { FormattedLine(it.first, icon = it.second ?: "") }
-        val infoTable = MarkupRenderer.render(info.asIterable(), 400f)
-        infoTable.background = BaseScreen.skinStrings.getUiBackground("General/Tooltip", BaseScreen.skinStrings.roundedEdgeRectangleShape, Color.DARK_GRAY)
-        return infoTable
+        return MarkupRenderer.render(info.asIterable(), 400f)
     }
 }

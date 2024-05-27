@@ -1,4 +1,6 @@
-﻿//  Taken from https://github.com/TomGrill/gdx-testing
+﻿@file:Suppress("UNUSED_VARIABLE")  // These are tests and the names serve readability
+
+//  Taken from https://github.com/TomGrill/gdx-testing
 package com.unciv.logic.map
 
 import com.badlogic.gdx.math.Vector2
@@ -22,8 +24,8 @@ import org.junit.runner.RunWith
 @RunWith(GdxTestRunner::class)
 class UnitMovementTests {
 
-    private lateinit var tile:Tile
-    private lateinit var civInfo:Civilization
+    private lateinit var tile: Tile
+    private lateinit var civInfo: Civilization
     private var testGame = TestGame()
 
     @Before
@@ -48,7 +50,7 @@ class UnitMovementTests {
         }
     }
 
-    fun addFakeUnit(unitType: UnitType, uniques:List<String> = listOf()): MapUnit {
+    fun addFakeUnit(unitType: UnitType, uniques: List<String> = listOf()): MapUnit {
         val baseUnit = BaseUnit()
         baseUnit.unitType = unitType.name
         baseUnit.ruleset = testGame.ruleset
@@ -174,7 +176,7 @@ class UnitMovementTests {
     fun canNOTPassThroughTileWithEnemyUnits() {
         val barbCiv = Civilization()
         barbCiv.gameInfo = testGame.gameInfo
-        barbCiv.civName = Constants.barbarians // they are always enemies
+        barbCiv.setNameForUnitTests(Constants.barbarians) // they are always enemies
         barbCiv.nation = Nation().apply { name = Constants.barbarians }
 
         testGame.gameInfo.civilizations.add(barbCiv)

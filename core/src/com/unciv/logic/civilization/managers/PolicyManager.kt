@@ -8,6 +8,7 @@ import com.unciv.logic.map.MapSize
 import com.unciv.models.ruleset.Policy
 import com.unciv.models.ruleset.Policy.PolicyBranchType
 import com.unciv.models.ruleset.PolicyBranch
+import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueMap
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
@@ -29,7 +30,9 @@ class PolicyManager : IsPartOfGameInfoSerialization {
     var freePolicies = 0
     var storedCulture = 0
     internal val adoptedPolicies = HashSet<String>()
-    var numberOfAdoptedPolicies = 0
+    private var numberOfAdoptedPolicies = 0
+
+    private var cultureOfLast8Turns = IntArray(8) { 0 }
 
     /** Indicates whether we should *check* if policy is adoptible, and if so open */
     var shouldOpenPolicyPicker = false
@@ -42,7 +45,9 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         get() {
             val value = HashMap<PolicyBranch, Int>()
             for (branch in branches) {
-                value[branch] = branch.priorities[civInfo.getPreferredVictoryType()] ?: 0
+                val victoryPriority = branch.priorities[civInfo.nation.preferredVictoryType] ?: 0
+                val personalityPriority = civInfo.getPersonality().priorities[branch.name] ?: 0
+                value[branch] = victoryPriority + personalityPriority
             }
             return value
         }
@@ -90,6 +95,7 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         toReturn.freePolicies = freePolicies
         toReturn.shouldOpenPolicyPicker = shouldOpenPolicyPicker
         toReturn.storedCulture = storedCulture
+        toReturn.cultureOfLast8Turns = cultureOfLast8Turns.clone()
         return toReturn
     }
 
@@ -111,6 +117,12 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         }
     }
 
+    private fun removePolicyFromTransients(policy: Policy) {
+        for (unique in policy.uniqueObjects) {
+            policyUniques.removeUnique(unique)
+        }
+    }
+
     fun addCulture(culture: Int) {
         val couldAdoptPolicyBefore = canAdoptPolicy()
         storedCulture += culture
@@ -121,11 +133,29 @@ class PolicyManager : IsPartOfGameInfoSerialization {
 
     fun endTurn(culture: Int) {
         addCulture(culture)
+        addCurrentCultureToCultureOfLast8Turns(culture)
     }
 
     // from https://forums.civfanatics.com/threads/the-number-crunching-thread.389702/
     // round down to nearest 5
     fun getCultureNeededForNextPolicy(): Int {
+        return getPolicyCultureCost(numberOfAdoptedPolicies)
+    }
+
+    fun getCultureRefundMap(policiesToRemove: List<Policy>, refundPercentage: Int): Map<Policy, Int> {
+        var policyCostInput = numberOfAdoptedPolicies
+
+        val policyMap = mutableMapOf<Policy, Int>()
+
+        for (policy in policiesToRemove) {
+            policyCostInput--
+            policyMap.put(policy, getPolicyCultureCost(policyCostInput))
+        }
+
+        return policyMap.toMap()
+    }
+
+    fun getPolicyCultureCost(numberOfAdoptedPolicies: Int): Int {
         var policyCultureCost = 25 + (numberOfAdoptedPolicies * 6).toDouble().pow(1.7)
         // https://civilization.fandom.com/wiki/Map_(Civ5)
         val worldSizeModifier = with(civInfo.gameInfo.tileMap.mapParameters.mapSize) {
@@ -161,8 +191,9 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         if (policy.policyBranchType == PolicyBranchType.BranchComplete) return false
         if (!getAdoptedPolicies().containsAll(policy.requires!!)) return false
         if (checkEra && civInfo.gameInfo.ruleset.eras[policy.branch.era]!!.eraNumber > civInfo.getEraNumber()) return false
-        if (policy.uniqueObjects.filter { it.type == UniqueType.OnlyAvailableWhen }
+        if (policy.getMatchingUniques(UniqueType.OnlyAvailable, StateForConditionals.IgnoreConditionals)
                 .any { !it.conditionalsApply(civInfo) }) return false
+        if (policy.hasUnique(UniqueType.Unavailable, StateForConditionals(civInfo))) return false
         return true
     }
 
@@ -203,14 +234,15 @@ class PolicyManager : IsPartOfGameInfoSerialization {
             triggerGlobalAlerts(policy, unique.params[0])
         }
 
+        //todo Can this be mapped downstream to a PolicyAction:NotificationAction?
         val triggerNotificationText = "due to adopting [${policy.name}]"
         for (unique in policy.uniqueObjects)
-            if (!unique.hasTriggerConditional())
-                UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo, triggerNotificationText = triggerNotificationText)
+            if (!unique.hasTriggerConditional() && unique.conditionalsApply(StateForConditionals(civInfo)))
+                UniqueTriggerActivation.triggerUnique(unique, civInfo, triggerNotificationText = triggerNotificationText)
 
         for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponAdoptingPolicyOrBelief))
             if (unique.conditionals.any {it.type == UniqueType.TriggerUponAdoptingPolicyOrBelief && it.params[0] == policy.name})
-                UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo, triggerNotificationText = triggerNotificationText)
+                UniqueTriggerActivation.triggerUnique(unique, civInfo, triggerNotificationText = triggerNotificationText)
 
         civInfo.cache.updateCivResources()
 
@@ -221,6 +253,41 @@ class PolicyManager : IsPartOfGameInfoSerialization {
         }
 
         if (!canAdoptPolicy()) shouldOpenPolicyPicker = false
+    }
+
+    /**
+     * @param branchCompletion Internal! Do not use in normal calls (used to recursively remove the "complete" object too)
+     * @param assumeWasFree If set, removal does not touch culture progression (numberOfAdoptedPolicies not decremented)
+     * @throws IllegalStateException when the given Policy is not adopted or when the removal would leave numberOfAdoptedPolicies negative
+     */
+    // Note: A policy gained as a free one is not marked as such, therefore we need the parameter
+    // Note: a negative numberOfAdoptedPolicies would later throw in getCultureNeededForNextPolicy: -1.pow() gives NaN, which throws on toInt... Autosaved!
+    fun removePolicy(policy: Policy, branchCompletion: Boolean = false, assumeWasFree: Boolean = false) {
+        if (!adoptedPolicies.remove(policy.name))
+            throw IllegalStateException("Attempt to remove non-adopted Policy ${policy.name}")
+
+        if (!assumeWasFree) {
+            if (--numberOfAdoptedPolicies < 0)
+                throw IllegalStateException("Attempt to remove Policy ${policy.name} but civ only has free policies left")
+        }
+
+        removePolicyFromTransients(policy)
+
+        // if a branch is already marked as complete, revert it to incomplete
+        if (!branchCompletion) {
+            val branch = policy.branch
+            if (branch.policies.count { isAdopted(it.name) } == branch.policies.size - 1) {
+                removePolicy(branch.policies.last(), true)
+            }
+        }
+
+        civInfo.cache.updateCivResources()
+
+        // This ALSO has the side-effect of updating the CivInfo statForNextTurn so we don't need to call it explicitly
+        for (city in civInfo.cities) {
+            city.cityStats.update()
+            city.reassignPopulationDeferred()
+        }
     }
 
     /**
@@ -248,6 +315,15 @@ class PolicyManager : IsPartOfGameInfoSerialization {
                 NotificationIcon.Culture
             )
         }
+    }
+
+
+    fun getCultureFromGreatWriter(): Int {
+        return (cultureOfLast8Turns.sum() * civInfo.gameInfo.speed.cultureCostModifier).toInt()
+    }
+
+    private fun addCurrentCultureToCultureOfLast8Turns(culture: Int) {
+        cultureOfLast8Turns[civInfo.gameInfo.turns % 8] = culture
     }
 
     fun allPoliciesAdopted(checkEra: Boolean) =

@@ -1,5 +1,7 @@
 package com.unciv.ui.screens.worldscreen.status
 
+import com.unciv.GUI
+import com.unciv.logic.civilization.managers.TurnManager
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.isEnabled
@@ -7,20 +9,22 @@ import com.unciv.ui.components.extensions.setSize
 import com.unciv.ui.components.input.KeyboardBinding
 import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
+import com.unciv.ui.components.input.onRightClick
 import com.unciv.ui.images.IconTextButton
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.hasOpenPopups
 import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.utils.Concurrency
 
 class NextTurnButton(
     private val worldScreen: WorldScreen
 ) : IconTextButton("", null, 30) {
     private var nextTurnAction = NextTurnAction.Default
-
     init {
 //         label.setFontSize(30)
         labelCell.pad(10f)
         onActivation { nextTurnAction.action(worldScreen) }
+        onRightClick { NextTurnMenu(stage, this, this, worldScreen) }
         keyShortcuts.add(KeyboardBinding.NextTurn)
         keyShortcuts.add(KeyboardBinding.NextTurnAlternate)
         // Let unit actions override this for command "Wait".
@@ -30,10 +34,19 @@ class NextTurnButton(
     fun update() {
         nextTurnAction = getNextTurnAction(worldScreen)
         updateButton(nextTurnAction)
+        val autoPlay = worldScreen.autoPlay
+        if (autoPlay.shouldContinueAutoPlaying() && worldScreen.isPlayersTurn
+            && !worldScreen.waitingForAutosave && !worldScreen.isNextTurnUpdateRunning()) {
+            autoPlay.runAutoPlayJobInNewThread("MultiturnAutoPlay", worldScreen, false) {
+                TurnManager(worldScreen.viewingCiv).automateTurn()
+                worldScreen.nextTurn()
+                autoPlay.endTurnMultiturnAutoPlay()
+            }
+        }
 
-        isEnabled = !worldScreen.hasOpenPopups() && worldScreen.isPlayersTurn
-                && !worldScreen.waitingForAutosave && !worldScreen.isNextTurnUpdateRunning()
-
+        isEnabled = nextTurnAction.getText (worldScreen) == "AutoPlay"
+            || (!worldScreen.hasOpenPopups() && worldScreen.isPlayersTurn
+                && !worldScreen.waitingForAutosave && !worldScreen.isNextTurnUpdateRunning())
         if (isEnabled) addTooltip(KeyboardBinding.NextTurn) else addTooltip("")
     }
 

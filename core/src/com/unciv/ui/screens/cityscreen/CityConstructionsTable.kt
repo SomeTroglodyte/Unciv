@@ -12,6 +12,7 @@ import com.unciv.GUI
 import com.unciv.logic.city.City
 import com.unciv.logic.city.CityConstructions
 import com.unciv.logic.map.tile.Tile
+import com.unciv.models.Religion
 import com.unciv.models.UncivSound
 import com.unciv.models.ruleset.Building
 import com.unciv.models.ruleset.IConstruction
@@ -38,6 +39,7 @@ import com.unciv.ui.components.extensions.packIfNeeded
 import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.extensions.toTextButton
+import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.components.input.KeyboardBinding
 import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
@@ -47,7 +49,6 @@ import com.unciv.ui.components.widgets.ColorMarkupLabel
 import com.unciv.ui.components.widgets.ExpanderTab
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.CityScreenConstructionMenu
-import com.unciv.ui.popups.ConfirmPopup
 import com.unciv.ui.popups.Popup
 import com.unciv.ui.popups.closeAllPopups
 import com.unciv.ui.screens.basescreen.BaseScreen
@@ -149,7 +150,9 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
 
     private fun updateButtons(construction: IConstruction?) {
         buyButtonsTable.clear()
-        if (!cityScreen.canCityBeChanged()) return
+        if (!cityScreen.canChangeState) return
+        /** [UniqueType.MayBuyConstructionsInPuppets] support - we need a buy button for civs that could buy items in puppets */
+        if (cityScreen.city.isPuppet && !cityScreen.city.getMatchingUniques(UniqueType.MayBuyConstructionsInPuppets).any()) return
         buyButtonsTable.add(getQueueButton(construction)).padRight(5f)
         if (construction != null && construction !is PerpetualConstruction)
             for (button in getBuyButtons(construction as INonPerpetualConstruction))
@@ -265,6 +268,11 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
                 var maxButtonWidth = constructionsQueueTable.width
                 for (dto in constructionButtonDTOList) {
 
+                    /** filter out showing buildings that have RequiresBuildingInThisCity
+                     * rejection (eg requiredBuilding entry) which are buildable.
+                     * The rejection for RequiresBuildingInThisCity isn't yielded if
+                     * the prerequisite is in the queue
+                     */
                     if (dto.construction is Building
                             && dto.rejectionReason?.type == RejectionReasonType.RequiresBuildingInThisCity
                             && constructionButtonDTOList.any {
@@ -325,7 +333,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         val isFirstConstructionOfItsKind = cityConstructions.isFirstConstructionOfItsKind(constructionQueueIndex, constructionName)
 
         var text = constructionName.tr(true) +
-                if (constructionName in PerpetualConstruction.perpetualConstructionsMap) "\n∞"
+                if (constructionName in PerpetualConstruction.perpetualConstructionsMap) "\n" + Fonts.infinity
                 else cityConstructions.getTurnsToConstructionString(construction, isFirstConstructionOfItsKind)
 
         val constructionResource = if (construction is BaseUnit)
@@ -366,6 +374,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         if (cityScreen.canCityBeChanged())
             table.onRightClick { selectQueueEntry {
                 CityScreenConstructionMenu(cityScreen.stage, table, cityScreen.city, construction) {
+                    cityScreen.city.reassignPopulation()
                     cityScreen.update()
                 }
             } }
@@ -394,7 +403,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         if (cityConstructions.getWorkDone(constructionName) == 0) return Table()
 
         val constructionPercentage = cityConstructions.getWorkDone(constructionName) /
-                (construction as INonPerpetualConstruction).getProductionCost(cityConstructions.city.civ).toFloat()
+                (construction as INonPerpetualConstruction).getProductionCost(cityConstructions.city.civ, cityConstructions.city).toFloat()
         return ImageGetter.getProgressBarVertical(2f, 30f, constructionPercentage,
                 Color.BROWN.brighten(0.5f), Color.WHITE)
     }
@@ -485,6 +494,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
                 cityScreen.updateWithoutConstructionAndMap()
             }
             CityScreenConstructionMenu(cityScreen.stage, pickConstructionButton, cityScreen.city, construction) {
+                cityScreen.city.reassignPopulation()
                 cityScreen.update()
             }
         }
@@ -552,8 +562,11 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
                 cityConstructions.removeFromQueue(selectedQueueEntry, false)
                 cityScreen.clearSelection()
                 selectedQueueEntry = -1
+                cityScreen.city.reassignPopulation()
                 cityScreen.update()
             }
+            if (city.isPuppet)
+                button.disable()
         } else {
             button = "Add to queue".toTextButton()
             if (construction == null
@@ -587,6 +600,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         cityConstructions.addToQueue(construction.name)
         if (!construction.shouldBeDisplayed(cityConstructions)) // For buildings - unlike units which can be queued multiple times
             cityScreen.clearSelection()
+        cityScreen.city.reassignPopulation()
         cityScreen.update()
         cityScreen.game.settings.addCompletedTutorialTask("Pick construction")
     }
@@ -646,7 +660,8 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
             return cityScreen.startPickTileForCreatesOneImprovement(construction, stat, true)
         // Buying a UniqueType.CreatesOneImprovement building from queue must pass down
         // the already selected tile, otherwise a new one is chosen from Automation code.
-        val improvement = construction.getImprovementToCreate(cityScreen.city.getRuleset())!!
+        val improvement = construction.getImprovementToCreate(
+            cityScreen.city.getRuleset(), cityScreen.city.civ)!!
         val tileForImprovement = cityScreen.city.cityConstructions.getTileForImprovement(improvement.name)
         askToBuyConstruction(construction, stat, tileForImprovement)
     }
@@ -667,16 +682,44 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         if (!isConstructionPurchaseAllowed(construction, stat, constructionStatBuyCost)) return
 
         cityScreen.closeAllPopups()
+        ConfirmBuyPopup(construction, stat,constructionStatBuyCost, tile)
+    }
 
-        val purchasePrompt = "Currently you have [${city.getStatReserve(stat)}] [${stat.name}].".tr() + "\n\n" +
-                "Would you like to purchase [${construction.name}] for [$constructionStatBuyCost] [${stat.character}]?".tr()
-        ConfirmPopup(
-            cityScreen,
-            purchasePrompt,
-            "Purchase",
-            true,
-            restoreDefault = { cityScreen.update() }
-        ) { purchaseConstruction(construction, stat, tile) }.open()
+    private inner class ConfirmBuyPopup(
+        construction: INonPerpetualConstruction,
+        stat: Stat,
+        constructionStatBuyCost: Int,
+        tile: Tile?
+    ) : Popup(cityScreen.stage) {
+        init {
+            val city = cityScreen.city
+            val balance = city.getStatReserve(stat)
+            val majorityReligion = city.religion.getMajorityReligion()
+            val yourReligion = city.civ.religionManager.religion
+            val isBuyingWithFaithForForeignReligion = construction.hasUnique(UniqueType.ReligiousUnit) && majorityReligion != yourReligion
+
+            addGoodSizedLabel("Currently you have [$balance] [${stat.name}].").padBottom(10f).row()
+            if (isBuyingWithFaithForForeignReligion) {
+                // Earlier tests should forbid this Popup unless both religions are non-null, but to be safe:
+                fun Religion?.getName() = this?.getReligionDisplayName() ?: Constants.unknownCityName
+                addGoodSizedLabel("You are buying a religious unit in a city that doesn't follow the religion you founded ([${yourReligion.getName()}]). " +
+                    "This means that the unit is tied to that foreign religion ([${majorityReligion.getName()}]) and will be less useful.").row()
+                addGoodSizedLabel("Are you really sure you want to purchase this unit?", Constants.headingFontSize).run {
+                    actor.color = Color.FIREBRICK
+                    padBottom(10f)
+                    row()
+                }
+            }
+            addGoodSizedLabel("Would you like to purchase [${construction.name}] for [$constructionStatBuyCost] [${stat.character}]?").row()
+
+            addCloseButton(Constants.cancel, KeyboardBinding.Cancel) { cityScreen.update() }
+            val confirmStyle = BaseScreen.skin.get("positive", TextButton.TextButtonStyle::class.java)
+            addOKButton("Purchase", KeyboardBinding.Confirm, confirmStyle) {
+                purchaseConstruction(construction, stat, tile)
+            }
+            equalizeLastTwoButtonWidths()
+            open(true)
+        }
     }
 
     /** This tests whether the buy button should be _shown_ */
@@ -689,7 +732,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
     private fun isConstructionPurchaseAllowed(construction: INonPerpetualConstruction, stat: Stat, constructionBuyCost: Int): Boolean {
         val city = cityScreen.city
         return when {
-            city.isPuppet -> false
+            city.isPuppet && !city.getMatchingUniques(UniqueType.MayBuyConstructionsInPuppets).any() -> false
             !cityScreen.canChangeState -> false
             city.isInResistance() -> false
             !construction.isPurchasable(city.cityConstructions) -> false    // checks via 'rejection reason'
@@ -730,6 +773,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
                     cityScreen.selectConstruction(newConstruction)
             }
         }
+        cityScreen.city.reassignPopulation()
         cityScreen.update()
     }
 
@@ -747,11 +791,11 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         button.onActivation {
             button.touchable = Touchable.disabled
             selectedQueueEntry = movePriority(constructionQueueIndex)
-            // No need to call entire cityScreen.update() as reordering doesn't influence Stat or Map,
-            // nor does it need an expensive rebuild of the available constructions.
             // Selection display may need to update as I can click the button of a non-selected entry.
             cityScreen.selectConstruction(name)
-            cityScreen.updateWithoutConstructionAndMap()
+            cityScreen.city.reassignPopulation()
+            cityScreen.update()
+            //cityScreen.updateWithoutConstructionAndMap()
             updateQueueAndButtons(cityScreen.selectedConstruction)
             ensureQueueEntryVisible()  // Not passing current button info - already outdated, our parent is already removed from the stage hierarchy and replaced
         }
@@ -776,6 +820,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
             tab.touchable = Touchable.disabled
             city.cityConstructions.removeFromQueue(constructionQueueIndex, false)
             cityScreen.clearSelection()
+            cityScreen.city.reassignPopulation()
             cityScreen.update()
         }
         return tab

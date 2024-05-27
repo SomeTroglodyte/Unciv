@@ -6,8 +6,10 @@ import com.unciv.logic.civilization.LocationAction
 import com.unciv.logic.civilization.NotificationCategory
 import com.unciv.logic.civilization.NotificationIcon
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
+import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.unique.StateForConditionals
+import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 
 
@@ -18,6 +20,7 @@ enum class ImprovementBuildingProblem(
     /** `true` if the ImprovementPicker should report this problem */
     val reportable: Boolean = false
 ) {
+    Replaced(permanent = true),
     WrongCiv(permanent = true),
     MissingTech(reportable = true),
     Unbuildable(permanent = true),
@@ -43,12 +46,17 @@ class TileInfoImprovementFunctions(val tile: Tile) {
 
         if (improvement.uniqueTo != null && improvement.uniqueTo != civInfo.civName)
             yield(ImprovementBuildingProblem.WrongCiv)
+        if (civInfo.cache.uniqueImprovements.any { it.replaces == improvement.name })
+            yield(ImprovementBuildingProblem.Replaced)
         if (improvement.techRequired != null && !civInfo.tech.isResearched(improvement.techRequired!!))
             yield(ImprovementBuildingProblem.MissingTech)
         if (improvement.getMatchingUniques(UniqueType.Unbuildable, StateForConditionals.IgnoreConditionals)
                 .any { it.conditionals.isEmpty() })
             yield(ImprovementBuildingProblem.Unbuildable)
         else if (improvement.hasUnique(UniqueType.Unbuildable, stateForConditionals))
+            yield(ImprovementBuildingProblem.ConditionallyUnbuildable)
+
+        if (improvement.hasUnique(UniqueType.Unavailable, stateForConditionals))
             yield(ImprovementBuildingProblem.ConditionallyUnbuildable)
 
         if (tile.getOwner() != civInfo && !improvement.hasUnique(UniqueType.CanBuildOutsideBorders, stateForConditionals)) {
@@ -58,7 +66,7 @@ class TileInfoImprovementFunctions(val tile: Tile) {
                 yield(ImprovementBuildingProblem.NotJustOutsideBorders)
         }
 
-        if (improvement.getMatchingUniques(UniqueType.OnlyAvailableWhen, StateForConditionals.IgnoreConditionals)
+        if (improvement.getMatchingUniques(UniqueType.OnlyAvailable, StateForConditionals.IgnoreConditionals)
                     .any { !it.conditionalsApply(stateForConditionals) })
             yield(ImprovementBuildingProblem.UnmetConditional)
 
@@ -74,10 +82,9 @@ class TileInfoImprovementFunctions(val tile: Tile) {
                     .any { civInfo.getResourceAmount(it.params[1]) < it.params[0].toInt() })
             yield(ImprovementBuildingProblem.MissingResources)
 
-        val knownFeatureRemovals = tile.ruleset.tileImprovements.values
+        val knownFeatureRemovals = tile.ruleset.tileRemovals
             .filter { rulesetImprovement ->
-                rulesetImprovement.name.startsWith(Constants.remove)
-                        && RoadStatus.values().none { it.removeAction == rulesetImprovement.name }
+                        RoadStatus.values().none { it.removeAction == rulesetImprovement.name }
                         && (rulesetImprovement.techRequired == null || civInfo.tech.isResearched(rulesetImprovement.techRequired!!))
             }
 
@@ -102,16 +109,18 @@ class TileInfoImprovementFunctions(val tile: Tile) {
         ): Boolean {
             val topTerrain = tile.lastTerrain
             // We can build if we are specifically allowed to build on this terrain
-            if (isAllowedOnFeature(topTerrain.name)) return true
+            if (isAllowedOnFeature(topTerrain)) return true
 
             // Otherwise, we can if this improvement removes the top terrain
             if (!hasUnique(UniqueType.RemovesFeaturesIfBuilt, stateForConditionals)) return false
-            val removeAction = tile.ruleset.tileImprovements[Constants.remove + topTerrain.name] ?: return false
-            // and we have the tech to remove that top terrain
-            if (removeAction.techRequired != null && (knownFeatureRemovals == null || removeAction !in knownFeatureRemovals)) return false
-            // and we can build it on the tile without the top terrain
+            if (knownFeatureRemovals.isNullOrEmpty()) return false
+            val featureRemovals = tile.terrainFeatures.mapNotNull { feature -> 
+                tile.ruleset.tileRemovals.firstOrNull { it.name == Constants.remove + feature } }
+            if (featureRemovals.isEmpty()) return false
+            if (featureRemovals.any { it !in knownFeatureRemovals }) return false
             val clonedTile = tile.clone()
-            clonedTile.removeTerrainFeature(topTerrain.name)
+            clonedTile.setTerrainFeatures(tile.terrainFeatures.filterNot {
+                feature -> featureRemovals.any{ it.name.removePrefix(Constants.remove) == feature } })
             return clonedTile.improvementFunctions.canImprovementBeBuiltHere(improvement, resourceIsVisible, knownFeatureRemovals, stateForConditionals)
         }
 
@@ -125,9 +134,9 @@ class TileInfoImprovementFunctions(val tile: Tile) {
             improvement.name == Constants.cancelImprovementOrder -> (tile.improvementInProgress != null)
             // Can only remove roads if that road is actually there
             RoadStatus.values().any { it.removeAction == improvement.name } -> tile.roadStatus.removeAction == improvement.name
-            // Can only remove features if that feature is actually there
-            improvement.name.startsWith(Constants.remove) -> tile.terrainFeatures.any { it == improvement.name.removePrefix(
-                Constants.remove) }
+            // Can only remove features or improvement if that feature/improvement is actually there
+            improvement.name.startsWith(Constants.remove) -> tile.terrainFeatures.any { Constants.remove + it == improvement.name }
+                || Constants.remove + tile.improvement == improvement.name
             // Can only build roads if on land and they are better than the current road
             RoadStatus.values().any { it.name == improvement.name } -> !tile.isWater
                     && RoadStatus.valueOf(improvement.name) > tile.roadStatus
@@ -170,7 +179,7 @@ class TileInfoImprovementFunctions(val tile: Tile) {
             // At this point we know this is a normal improvement and that there is no reason not to allow it to be built.
 
             // Lastly we check if the improvement may be built on this terrain or resource
-            improvement.canBeBuiltOn(tile.lastTerrain.name) -> true
+            improvement.isAllowedOnFeature(tile.lastTerrain) -> true
             tile.isLand && improvement.canBeBuiltOn("Land") -> true
             tile.isWater && improvement.canBeBuiltOn("Water") -> true
             // DO NOT reverse this &&. isAdjacentToFreshwater() is a lazy which calls a function, and reversing it breaks the tests.
@@ -187,12 +196,12 @@ class TileInfoImprovementFunctions(val tile: Tile) {
 
     fun changeImprovement(improvementName: String?,
                           /** For road assignment and taking over tiles - DO NOT pass when simulating improvement effects! */
-                          civToActivateBroaderEffects:Civilization? = null) {
+                          civToActivateBroaderEffects: Civilization? = null, unit: MapUnit? = null) {
         val improvementObject = tile.ruleset.tileImprovements[improvementName]
 
         when {
             improvementName?.startsWith(Constants.remove) == true -> {
-                adtivateRemovalImprovement(improvementName, civToActivateBroaderEffects)
+                activateRemovalImprovement(improvementName, civToActivateBroaderEffects)
             }
             improvementName == RoadStatus.Road.name -> tile.addRoad(RoadStatus.Road, civToActivateBroaderEffects)
             improvementName == RoadStatus.Railroad.name -> tile.addRoad(RoadStatus.Railroad, civToActivateBroaderEffects)
@@ -208,14 +217,14 @@ class TileInfoImprovementFunctions(val tile: Tile) {
         if (improvementObject != null && improvementObject.hasUnique(UniqueType.RemovesFeaturesIfBuilt)) {
             // Remove terrainFeatures that a Worker can remove
             // and that aren't explicitly allowed under the improvement
-            val removableTerrainFeatures = tile.terrainFeatures.filter { feature ->
-                val removingAction = "${Constants.remove}$feature"
+            val removableTerrainFeatures = tile.terrainFeatureObjects.filter { feature ->
+                val removingAction = "${Constants.remove}${feature.name}"
 
                 removingAction in tile.ruleset.tileImprovements // is removable
                     && !improvementObject.isAllowedOnFeature(feature) // cannot coexist
             }
 
-            tile.setTerrainFeatures(tile.terrainFeatures.filterNot { it in removableTerrainFeatures })
+            tile.setTerrainFeatures(tile.terrainFeatures.filterNot { feature -> removableTerrainFeatures.any { it.name == feature } })
         }
 
         if (civToActivateBroaderEffects != null && improvementObject != null
@@ -223,17 +232,39 @@ class TileInfoImprovementFunctions(val tile: Tile) {
         )
             takeOverTilesAround(civToActivateBroaderEffects, tile)
 
+        if (civToActivateBroaderEffects != null && improvementObject != null)
+            triggerImprovementUniques(improvementObject, civToActivateBroaderEffects, unit)
+
         val city = tile.owningCity
-        if (city != null) {
+        if (civToActivateBroaderEffects != null && city != null) {
             city.cityStats.update()
-            if (civToActivateBroaderEffects != null) {
-                city.civ.cache.updateCivResources()
-                city.reassignPopulationDeferred()
-            }
+            city.civ.cache.updateCivResources()
+            city.reassignPopulationDeferred()
         }
     }
 
-    private fun adtivateRemovalImprovement(
+    private fun triggerImprovementUniques(
+        improvement: TileImprovement,
+        civ: Civilization,
+        unit: MapUnit? = null
+    ) {
+        val stateForConditionals = StateForConditionals(civ, unit = unit, tile = tile)
+
+        for (unique in improvement.uniqueObjects.filter { !it.hasTriggerConditional()
+            && it.conditionalsApply(stateForConditionals) })
+            UniqueTriggerActivation.triggerUnique(unique, civ, unit = unit, tile = tile)
+
+        for (unique in civ.getTriggeredUniques(UniqueType.TriggerUponBuildingImprovement, stateForConditionals)
+            .filter { improvement.matchesFilter(it.params[0]) })
+            UniqueTriggerActivation.triggerUnique(unique, civ, unit = unit, tile = tile)
+
+        if (unit == null) return
+        for (unique in unit.getTriggeredUniques(UniqueType.TriggerUponBuildingImprovement, stateForConditionals)
+            .filter { improvement.matchesFilter(it.params[0]) })
+            UniqueTriggerActivation.triggerUnique(unique, civ, unit = unit, tile = tile)
+    }
+
+    private fun activateRemovalImprovement(
         improvementName: String,
         civToActivateBroaderEffects: Civilization?
     ) {
@@ -249,7 +280,9 @@ class TileInfoImprovementFunctions(val tile: Tile) {
 
         if (RoadStatus.values().any { improvementName == it.removeAction }) {
             tile.removeRoad()
-        } else {
+        }
+        else if (tile.improvement == removedFeatureName) tile.removeImprovement()
+        else {
             val removedFeatureObject = tile.ruleset.terrains[removedFeatureName]
             if (removedFeatureObject != null
                 && civToActivateBroaderEffects != null
@@ -261,7 +294,7 @@ class TileInfoImprovementFunctions(val tile: Tile) {
         }
     }
 
-    private fun tryProvideProductionToClosestCity(removedTerrainFeature: String, civ:Civilization) {
+    private fun tryProvideProductionToClosestCity(removedTerrainFeature: String, civ: Civilization) {
         val closestCity = civ.cities.minByOrNull { it.getCenterTile().aerialDistanceTo(tile) }
         @Suppress("FoldInitializerAndIfToElvis")
         if (closestCity == null) return

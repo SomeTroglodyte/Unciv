@@ -16,6 +16,9 @@ import com.unciv.models.translations.tr
 import com.unciv.ui.audio.SoundPlayer
 import com.unciv.ui.components.extensions.isEnabled
 import com.unciv.ui.components.extensions.toTextButton
+import com.unciv.ui.components.input.KeyboardBinding
+import com.unciv.ui.components.input.keyShortcuts
+import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.input.onDoubleClick
 import com.unciv.ui.images.ImageGetter
@@ -89,6 +92,8 @@ class PromotionPickerScreen(
 
         displayTutorial(TutorialTrigger.Experience)
     }
+
+    override fun getCivilopediaRuleset() = unit.civ.gameInfo.ruleset
 
     private fun acceptPromotion(button: PromotionButton?) {
         // if user managed to click disabled button, still do nothing
@@ -324,6 +329,11 @@ class PromotionPickerScreen(
         }
         val promotionText = node.promotion.getDescription(tree.possiblePromotions)
         descriptionLabel.setText("$topLine\n$promotionText")
+        descriptionLabel.clearListeners()
+        descriptionLabel.onActivation {
+            openCivilopedia(node.promotion.makeLink())
+        }
+        descriptionLabel.keyShortcuts.add(KeyboardBinding.Civilopedia)
     }
 
     override fun recreate() = recreate(closeOnPick)

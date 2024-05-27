@@ -2,13 +2,14 @@ package com.unciv.models.ruleset.validation
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.g2d.TextureAtlas.TextureAtlasData
 import com.unciv.Constants
 import com.unciv.json.fromJsonFile
 import com.unciv.json.json
 import com.unciv.logic.map.tile.RoadStatus
 import com.unciv.models.metadata.BaseRuleset
+import com.unciv.models.ruleset.BeliefType
 import com.unciv.models.ruleset.Building
+import com.unciv.models.ruleset.IRulesetObject
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.nation.Nation
@@ -19,13 +20,17 @@ import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.ruleset.unit.Promotion
+import com.unciv.models.stats.INamed
 import com.unciv.models.stats.Stats
 import com.unciv.models.tilesets.TileSetCache
 import com.unciv.models.tilesets.TileSetConfig
+import com.unciv.ui.images.AtlasPreview
 
 class RulesetValidator(val ruleset: Ruleset) {
 
     private val uniqueValidator = UniqueValidator(ruleset)
+
+    private lateinit var textureNamesCache: AtlasPreview
 
     fun getErrorList(tryFixUnknownUniques: Boolean = false): RulesetErrorList {
         // When no base ruleset is loaded - references cannot be checked
@@ -35,9 +40,10 @@ class RulesetValidator(val ruleset: Ruleset) {
     }
 
     private fun getNonBaseRulesetErrorList(tryFixUnknownUniques: Boolean): RulesetErrorList {
-        val lines = RulesetErrorList()
+        val lines = RulesetErrorList(ruleset)
 
         // When not checking the entire ruleset, we can only really detect ruleset-invariant errors in uniques
+        addModOptionsErrors(lines, tryFixUnknownUniques)
         uniqueValidator.checkUniques(ruleset.globalUniques, lines, false, tryFixUnknownUniques)
         addUnitErrorsRulesetInvariant(lines, tryFixUnknownUniques)
         addTechErrorsRulesetInvariant(lines, tryFixUnknownUniques)
@@ -47,20 +53,24 @@ class RulesetValidator(val ruleset: Ruleset) {
         addPromotionErrorsRulesetInvariant(lines, tryFixUnknownUniques)
         addResourceErrorsRulesetInvariant(lines, tryFixUnknownUniques)
 
-        /**********************  **********************/
-        // e.g. json configs complete and parseable
-        // Check for mod or Civ_V_GnK to avoid running the same test twice (~200ms for the builtin assets)
-        if (ruleset.folderLocation != null) checkTilesetSanity(lines)
+        if (!::textureNamesCache.isInitialized)
+            textureNamesCache = AtlasPreview(ruleset, lines)  // This logs Atlas list errors, and if these exist, scans for invalid png's
+
+        // Tileset tests - e.g. json configs complete and parseable
+        checkTilesetSanity(lines)  // relies on textureNamesCache
+
+        checkCivilopediaText(lines)  // relies on textureNamesCache
 
         return lines
     }
 
 
-    private fun getBaseRulesetErrorList(tryFixUnknownUniques: Boolean): RulesetErrorList{
+    private fun getBaseRulesetErrorList(tryFixUnknownUniques: Boolean): RulesetErrorList {
 
         uniqueValidator.populateFilteringUniqueHashsets()
 
-        val lines = RulesetErrorList()
+        val lines = RulesetErrorList(ruleset)
+        addModOptionsErrors(lines, tryFixUnknownUniques)
         uniqueValidator.checkUniques(ruleset.globalUniques, lines, true, tryFixUnknownUniques)
 
         addUnitErrorsBaseRuleset(lines, tryFixUnknownUniques)
@@ -80,15 +90,43 @@ class RulesetValidator(val ruleset: Ruleset) {
         addPromotionErrors(lines, tryFixUnknownUniques)
         addUnitTypeErrors(lines, tryFixUnknownUniques)
         addVictoryTypeErrors(lines)
-        addDifficutlyErrors(lines)
+        addDifficultyErrors(lines)
+        addEventErrors(lines, tryFixUnknownUniques)
         addCityStateTypeErrors(tryFixUnknownUniques, lines)
 
+        if (!::textureNamesCache.isInitialized)
+            textureNamesCache = AtlasPreview(ruleset, lines)  // This logs Atlas list errors, and if these exist, scans for invalid png's
+
+        // Tileset tests - e.g. json configs complete and parseable
         // Check for mod or Civ_V_GnK to avoid running the same test twice (~200ms for the builtin assets)
         if (ruleset.folderLocation != null || ruleset.name == BaseRuleset.Civ_V_GnK.fullName) {
             checkTilesetSanity(lines)
         }
 
+        checkCivilopediaText(lines)
+
         return lines
+    }
+
+    private fun addModOptionsErrors(lines: RulesetErrorList, tryFixUnknownUniques: Boolean) {
+        // Basic Unique validation (type, target, parameters) should always run.
+        // Using reportRulesetSpecificErrors=true as ModOptions never should use Uniques depending on objects from a base ruleset anyway.
+        uniqueValidator.checkUniques(ruleset.modOptions, lines, reportRulesetSpecificErrors = true, tryFixUnknownUniques)
+
+        if (ruleset.name.isBlank()) return // The rest of these tests don't make sense for combined rulesets
+
+        val audioVisualUniqueTypes = setOf(
+            UniqueType.ModIsAudioVisual,
+            UniqueType.ModIsAudioVisualOnly,
+            UniqueType.ModIsNotAudioVisual
+        )
+        // modOptions is a valid sourceObject, but unnecessary
+        if (ruleset.modOptions.uniqueObjects.count { it.type in audioVisualUniqueTypes } > 1)
+            lines.add("A mod should only specify one of the 'can/should/cannot be used as permanent audiovisual mod' options.", sourceObject = null)
+        if (!ruleset.modOptions.isBaseRuleset) return
+        for (unique in ruleset.modOptions.getMatchingUniques(UniqueType.ModRequires)) {
+            lines.add("Mod option '${unique.text}' is invalid for a base ruleset.", sourceObject = null)
+        }
     }
 
     private fun addCityStateTypeErrors(
@@ -108,33 +146,46 @@ class RulesetValidator(val ruleset: Ruleset) {
         }
     }
 
-    private fun addDifficutlyErrors(lines: RulesetErrorList) {
+    private fun addDifficultyErrors(lines: RulesetErrorList) {
+        // A Difficulty is not a IHasUniques, so not suitable as sourceObject
         for (difficulty in ruleset.difficulties.values) {
             for (unitName in difficulty.aiCityStateBonusStartingUnits + difficulty.aiMajorCivBonusStartingUnits + difficulty.playerBonusStartingUnits)
                 if (unitName != Constants.eraSpecificUnit && !ruleset.units.containsKey(unitName))
-                    lines += "Difficulty ${difficulty.name} contains starting unit $unitName which does not exist!"
+                    lines.add("Difficulty ${difficulty.name} contains starting unit $unitName which does not exist!", sourceObject = null)
+        }
+    }
+
+    private fun addEventErrors(lines: RulesetErrorList,
+                               tryFixUnknownUniques: Boolean) {
+        // An Event is not a IHasUniques, so not suitable as sourceObject
+        for (event in ruleset.events.values) {
+            for (choice in event.choices) {
+                for (unique in choice.conditionObjects + choice.triggeredUniqueObjects)
+                    lines += uniqueValidator.checkUnique(unique, tryFixUnknownUniques, null, true)
+            }
         }
     }
 
     private fun addVictoryTypeErrors(lines: RulesetErrorList) {
+        // Victory and Milestone aren't IHasUniques and are unsuitable as sourceObject
         for (victoryType in ruleset.victories.values) {
             for (requiredUnit in victoryType.requiredSpaceshipParts)
                 if (!ruleset.units.contains(requiredUnit))
                     lines.add(
                         "Victory type ${victoryType.name} requires adding the non-existant unit $requiredUnit to the capital to win!",
-                        RulesetErrorSeverity.Warning
+                        RulesetErrorSeverity.Warning, sourceObject = null
                     )
             for (milestone in victoryType.milestoneObjects)
                 if (milestone.type == null)
                     lines.add(
                         "Victory type ${victoryType.name} has milestone ${milestone.uniqueDescription} that is of an unknown type!",
-                        RulesetErrorSeverity.Error
+                        RulesetErrorSeverity.Error, sourceObject = null
                     )
             for (victory in ruleset.victories.values)
                 if (victory.name != victoryType.name && victory.milestones == victoryType.milestones)
                     lines.add(
                         "Victory types ${victoryType.name} and ${victory.name} have the same requirements!",
-                        RulesetErrorSeverity.Warning
+                        RulesetErrorSeverity.Warning, sourceObject = null
                     )
         }
     }
@@ -160,12 +211,12 @@ class RulesetValidator(val ruleset: Ruleset) {
                 if (!ruleset.unitPromotions.containsKey(prereq))
                     lines.add(
                         "${promotion.name} requires promotion $prereq which does not exist!",
-                        RulesetErrorSeverity.Warning
+                        RulesetErrorSeverity.Warning, promotion
                     )
             for (unitType in promotion.unitTypes) checkUnitType(unitType) {
                 lines.add(
                     "${promotion.name} references unit type $unitType, which does not exist!",
-                    RulesetErrorSeverity.Warning
+                    RulesetErrorSeverity.Warning, promotion
                 )
             }
             uniqueValidator.checkUniques(promotion, lines, true, tryFixUnknownUniques)
@@ -178,9 +229,11 @@ class RulesetValidator(val ruleset: Ruleset) {
         tryFixUnknownUniques: Boolean
     ) {
         for (reward in ruleset.ruinRewards.values) {
+            @Suppress("KotlinConstantConditions") // data is read from json, so any assumptions may be wrong
+            if (reward.weight < 0) lines.add("${reward.name} has a negative weight, which is not allowed!", sourceObject = reward)
             for (difficulty in reward.excludedDifficulties)
                 if (!ruleset.difficulties.containsKey(difficulty))
-                    lines += "${reward.name} references difficulty ${difficulty}, which does not exist!"
+                    lines.add("${reward.name} references difficulty ${difficulty}, which does not exist!", sourceObject = reward)
             uniqueValidator.checkUniques(reward, lines, true, tryFixUnknownUniques)
         }
     }
@@ -193,18 +246,18 @@ class RulesetValidator(val ruleset: Ruleset) {
             if (policy.requires != null)
                 for (prereq in policy.requires!!)
                     if (!ruleset.policies.containsKey(prereq))
-                        lines += "${policy.name} requires policy $prereq which does not exist!"
+                        lines.add("${policy.name} requires policy $prereq which does not exist!", sourceObject = policy)
             uniqueValidator.checkUniques(policy, lines, true, tryFixUnknownUniques)
         }
 
         for (branch in ruleset.policyBranches.values)
             if (branch.era !in ruleset.eras)
-                lines += "${branch.name} requires era ${branch.era} which does not exist!"
+                lines.add("${branch.name} requires era ${branch.era} which does not exist!", sourceObject = branch)
 
 
         for (policy in ruleset.policyBranches.values.flatMap { it.policies + it })
             if (policy != ruleset.policies[policy.name])
-                lines += "More than one policy with the name ${policy.name} exists!"
+                lines.add("More than one policy with the name ${policy.name} exists!", sourceObject = policy)
 
     }
 
@@ -217,10 +270,12 @@ class RulesetValidator(val ruleset: Ruleset) {
 
             uniqueValidator.checkUniques(nation, lines, true, tryFixUnknownUniques)
 
+            if (nation.preferredVictoryType != Constants.neutralVictoryType && nation.preferredVictoryType !in ruleset.victories)
+                lines.add("${nation.name}'s preferredVictoryType is ${nation.preferredVictoryType} which does not exist!", sourceObject = nation)
             if (nation.cityStateType != null && nation.cityStateType !in ruleset.cityStateTypes)
-                lines += "${nation.name} is of city-state type ${nation.cityStateType} which does not exist!"
+                lines.add("${nation.name} is of city-state type ${nation.cityStateType} which does not exist!", sourceObject = nation)
             if (nation.favoredReligion != null && nation.favoredReligion !in ruleset.religions)
-                lines += "${nation.name} has ${nation.favoredReligion} as their favored religion, which does not exist!"
+                lines.add("${nation.name} has ${nation.favoredReligion} as their favored religion, which does not exist!", sourceObject = nation)
         }
     }
 
@@ -229,6 +284,8 @@ class RulesetValidator(val ruleset: Ruleset) {
         tryFixUnknownUniques: Boolean
     ) {
         for (belief in ruleset.beliefs.values) {
+            if (belief.type == BeliefType.Any || belief.type == BeliefType.None)
+                lines.add("${belief.name} type is ${belief.type}, which is not allowed!", sourceObject = belief)
             uniqueValidator.checkUniques(belief, lines, true, tryFixUnknownUniques)
         }
     }
@@ -236,9 +293,9 @@ class RulesetValidator(val ruleset: Ruleset) {
     private fun addSpeedErrors(lines: RulesetErrorList) {
         for (speed in ruleset.speeds.values) {
             if (speed.modifier < 0f)
-                lines += "Negative speed modifier for game speed ${speed.name}"
+                lines.add("Negative speed modifier for game speed ${speed.name}", sourceObject = speed)
             if (speed.yearsPerTurn.isEmpty())
-                lines += "Empty turn increment list for game speed ${speed.name}"
+                lines.add("Empty turn increment list for game speed ${speed.name}", sourceObject = speed)
         }
     }
 
@@ -247,7 +304,7 @@ class RulesetValidator(val ruleset: Ruleset) {
         tryFixUnknownUniques: Boolean
     ) {
         if (ruleset.eras.isEmpty()) {
-            lines += "Eras file is empty! This will likely lead to crashes. Ask the mod maker to update this mod!"
+            lines.add("Eras file is empty! This will likely lead to crashes. Ask the mod maker to update this mod!", sourceObject = null)
         }
 
         val allDifficultiesStartingUnits = hashSetOf<String>()
@@ -260,38 +317,38 @@ class RulesetValidator(val ruleset: Ruleset) {
         for (era in ruleset.eras.values) {
             for (wonder in era.startingObsoleteWonders)
                 if (wonder !in ruleset.buildings)
-                    lines += "Nonexistent wonder $wonder obsoleted when starting in ${era.name}!"
+                    lines.add("Nonexistent wonder $wonder obsoleted when starting in ${era.name}!", sourceObject = era)
             for (building in era.settlerBuildings)
                 if (building !in ruleset.buildings)
-                    lines += "Nonexistent building $building built by settlers when starting in ${era.name}"
+                    lines.add("Nonexistent building $building built by settlers when starting in ${era.name}", sourceObject = era)
             // todo the whole 'starting unit' thing needs to be redone, there's no reason we can't have a single list containing all the starting units.
             if (era.startingSettlerUnit !in ruleset.units
                 && ruleset.units.values.none { it.isCityFounder() }
             )
-                lines += "Nonexistent unit ${era.startingSettlerUnit} marked as starting unit when starting in ${era.name}"
+                lines.add("Nonexistent unit ${era.startingSettlerUnit} marked as starting unit when starting in ${era.name}", sourceObject = era)
             if (era.startingWorkerCount != 0 && era.startingWorkerUnit !in ruleset.units
                 && ruleset.units.values.none { it.hasUnique(UniqueType.BuildImprovements) }
             )
-                lines += "Nonexistent unit ${era.startingWorkerUnit} marked as starting unit when starting in ${era.name}"
+                lines.add("Nonexistent unit ${era.startingWorkerUnit} marked as starting unit when starting in ${era.name}", sourceObject = era)
 
             val grantsStartingMilitaryUnit = era.startingMilitaryUnitCount != 0
                 || allDifficultiesStartingUnits.contains(Constants.eraSpecificUnit)
             if (grantsStartingMilitaryUnit && era.startingMilitaryUnit !in ruleset.units)
-                lines += "Nonexistent unit ${era.startingMilitaryUnit} marked as starting unit when starting in ${era.name}"
+                lines.add("Nonexistent unit ${era.startingMilitaryUnit} marked as starting unit when starting in ${era.name}", sourceObject = era)
             if (era.researchAgreementCost < 0 || era.startingSettlerCount < 0 || era.startingWorkerCount < 0 || era.startingMilitaryUnitCount < 0 || era.startingGold < 0 || era.startingCulture < 0)
-                lines += "Unexpected negative number found while parsing era ${era.name}"
+                lines.add("Unexpected negative number found while parsing era ${era.name}", sourceObject = era)
             if (era.settlerPopulation <= 0)
-                lines += "Population in cities from settlers must be strictly positive! Found value ${era.settlerPopulation} for era ${era.name}"
+                lines.add("Population in cities from settlers must be strictly positive! Found value ${era.settlerPopulation} for era ${era.name}", sourceObject = era)
 
             if (era.allyBonus.isNotEmpty())
                 lines.add(
                     "Era ${era.name} contains city-state bonuses. City-state bonuses are now defined in CityStateType.json",
-                    RulesetErrorSeverity.WarningOptionsOnly
+                    RulesetErrorSeverity.WarningOptionsOnly, era
                 )
             if (era.friendBonus.isNotEmpty())
                 lines.add(
                     "Era ${era.name} contains city-state bonuses. City-state bonuses are now defined in CityStateType.json",
-                    RulesetErrorSeverity.WarningOptionsOnly
+                    RulesetErrorSeverity.WarningOptionsOnly, era
                 )
 
             uniqueValidator.checkUniques(era, lines, true, tryFixUnknownUniques)
@@ -305,20 +362,20 @@ class RulesetValidator(val ruleset: Ruleset) {
         for (tech in ruleset.technologies.values) {
             for (prereq in tech.prerequisites) {
                 if (!ruleset.technologies.containsKey(prereq))
-                    lines += "${tech.name} requires tech $prereq which does not exist!"
+                    lines.add("${tech.name} requires tech $prereq which does not exist!", sourceObject = tech)
 
                 if (tech.prerequisites.any { it != prereq && getPrereqTree(it).contains(prereq) }) {
                     lines.add(
                         "No need to add $prereq as a prerequisite of ${tech.name} - it is already implicit from the other prerequisites!",
-                        RulesetErrorSeverity.Warning
+                        RulesetErrorSeverity.Warning, tech
                     )
                 }
 
                 if (getPrereqTree(prereq).contains(tech.name))
-                    lines += "Techs ${tech.name} and $prereq require each other!"
+                    lines.add("Techs ${tech.name} and $prereq require each other!", sourceObject = tech)
             }
             if (tech.era() !in ruleset.eras)
-                lines += "Unknown era ${tech.era()} referenced in column of tech ${tech.name}"
+                lines.add("Unknown era ${tech.era()} referenced in column of tech ${tech.name}", sourceObject = tech)
             uniqueValidator.checkUniques(tech, lines, true, tryFixUnknownUniques)
         }
     }
@@ -328,25 +385,25 @@ class RulesetValidator(val ruleset: Ruleset) {
         tryFixUnknownUniques: Boolean
     ) {
         if (ruleset.terrains.values.none { it.type == TerrainType.Land && !it.impassable })
-            lines += "No passable land terrains exist!"
+            lines.add("No passable land terrains exist!", sourceObject = null)
 
         for (terrain in ruleset.terrains.values) {
             for (baseTerrainName in terrain.occursOn) {
                 val baseTerrain = ruleset.terrains[baseTerrainName]
                 if (baseTerrain == null)
-                    lines += "${terrain.name} occurs on terrain $baseTerrainName which does not exist!"
+                    lines.add("${terrain.name} occurs on terrain $baseTerrainName which does not exist!", sourceObject = terrain)
                 else if (baseTerrain.type == TerrainType.NaturalWonder)
-                    lines.add("${terrain.name} occurs on natural wonder $baseTerrainName: Unsupported.", RulesetErrorSeverity.WarningOptionsOnly)
+                    lines.add("${terrain.name} occurs on natural wonder $baseTerrainName: Unsupported.", RulesetErrorSeverity.WarningOptionsOnly, terrain)
             }
             if (terrain.type == TerrainType.NaturalWonder) {
                 if (terrain.turnsInto == null)
-                    lines += "Natural Wonder ${terrain.name} is missing the turnsInto attribute!"
+                    lines.add("Natural Wonder ${terrain.name} is missing the turnsInto attribute!", sourceObject = terrain)
                 val baseTerrain = ruleset.terrains[terrain.turnsInto]
                 if (baseTerrain == null)
-                    lines += "${terrain.name} turns into terrain ${terrain.turnsInto} which does not exist!"
+                    lines.add("${terrain.name} turns into terrain ${terrain.turnsInto} which does not exist!", sourceObject = terrain)
                 else if (!baseTerrain.type.isBaseTerrain)
                     // See https://github.com/hackedpassword/Z2/blob/main/HybridTileTech.md for a clever exploit
-                    lines.add("${terrain.name} turns into terrain ${terrain.turnsInto} which is not a base terrain!", RulesetErrorSeverity.Warning)
+                    lines.add("${terrain.name} turns into terrain ${terrain.turnsInto} which is not a base terrain!", RulesetErrorSeverity.Warning, terrain)
             }
             uniqueValidator.checkUniques(terrain, lines, true, tryFixUnknownUniques)
         }
@@ -358,10 +415,12 @@ class RulesetValidator(val ruleset: Ruleset) {
     ) {
         for (improvement in ruleset.tileImprovements.values) {
             if (improvement.techRequired != null && !ruleset.technologies.containsKey(improvement.techRequired!!))
-                lines += "${improvement.name} requires tech ${improvement.techRequired} which does not exist!"
+                lines.add("${improvement.name} requires tech ${improvement.techRequired} which does not exist!", sourceObject = improvement)
+            if (improvement.replaces != null && !ruleset.tileImprovements.containsKey(improvement.replaces))
+                lines.add("${improvement.name} replaces ${improvement.replaces} which does not exist!", sourceObject = improvement)
             for (terrain in improvement.terrainsCanBeBuiltOn)
                 if (!ruleset.terrains.containsKey(terrain) && terrain != "Land" && terrain != "Water")
-                    lines += "${improvement.name} can be built on terrain $terrain which does not exist!"
+                    lines.add("${improvement.name} can be built on terrain $terrain which does not exist!", sourceObject = improvement)
             if (improvement.terrainsCanBeBuiltOn.isEmpty()
                 && !improvement.hasUnique(UniqueType.CanOnlyImproveResource)
                 && !improvement.hasUnique(UniqueType.Unbuildable)
@@ -370,8 +429,8 @@ class RulesetValidator(val ruleset: Ruleset) {
                 && improvement.name != Constants.cancelImprovementOrder
             ) {
                 lines.add(
-                    "${improvement.name} has an empty `terrainsCanBeBuiltOn`, isn't allowed to only improve resources and isn't unbuildable! Support for this will soon end. Either give this the unique \"Unbuildable\", \"Can only be built to improve a resource\" or add \"Land\", \"Water\" or any other value to `terrainsCanBeBuiltOn`.",
-                    RulesetErrorSeverity.Warning
+                    "${improvement.name} has an empty `terrainsCanBeBuiltOn`, isn't allowed to only improve resources. As such it isn't buildable! Either give this the unique \"Unbuildable\", \"Can only be built to improve a resource\", or add \"Land\", \"Water\" or any other value to `terrainsCanBeBuiltOn`.",
+                    RulesetErrorSeverity.Warning, improvement
                 )
             }
             for (unique in improvement.uniqueObjects
@@ -380,7 +439,7 @@ class RulesetValidator(val ruleset: Ruleset) {
                 val params = Stats.parse(unique.params[0])
                 if (params.values.any { it < 0 }) lines.add(
                     "${improvement.name} cannot have a negative value for a pillage yield!",
-                    RulesetErrorSeverity.Error
+                    RulesetErrorSeverity.Error, improvement
                 )
             }
 
@@ -389,7 +448,7 @@ class RulesetValidator(val ruleset: Ruleset) {
             if (hasPillageUnique && improvement.hasUnique(UniqueType.Unpillagable, StateForConditionals.IgnoreConditionals)) {
                 lines.add(
                     "${improvement.name} has both an `Unpillagable` unique type and a `PillageYieldRandom` or `PillageYieldFixed` unique type!",
-                    RulesetErrorSeverity.Warning
+                    RulesetErrorSeverity.Warning, improvement
                 )
             }
             uniqueValidator.checkUniques(improvement, lines, true, tryFixUnknownUniques)
@@ -402,26 +461,27 @@ class RulesetValidator(val ruleset: Ruleset) {
     ) {
         for (resource in ruleset.tileResources.values) {
             if (resource.revealedBy != null && !ruleset.technologies.containsKey(resource.revealedBy!!))
-                lines += "${resource.name} revealed by tech ${resource.revealedBy} which does not exist!"
+                lines.add("${resource.name} revealed by tech ${resource.revealedBy} which does not exist!", sourceObject = resource)
             if (resource.improvement != null && !ruleset.tileImprovements.containsKey(resource.improvement!!))
-                lines += "${resource.name} improved by improvement ${resource.improvement} which does not exist!"
+                lines.add("${resource.name} improved by improvement ${resource.improvement} which does not exist!", sourceObject = resource)
             for (improvement in resource.improvedBy)
                 if (!ruleset.tileImprovements.containsKey(improvement))
-                    lines += "${resource.name} improved by improvement $improvement which does not exist!"
+                    lines.add("${resource.name} improved by improvement $improvement which does not exist!", sourceObject = resource)
             for (terrain in resource.terrainsCanBeFoundOn)
                 if (!ruleset.terrains.containsKey(terrain))
-                    lines += "${resource.name} can be found on terrain $terrain which does not exist!"
+                    lines.add("${resource.name} can be found on terrain $terrain which does not exist!", sourceObject = resource)
             uniqueValidator.checkUniques(resource, lines, true, tryFixUnknownUniques)
         }
     }
 
     private fun addSpecialistErrors(lines: RulesetErrorList) {
+        // Specialist is not a IHasUniques and unsuitable as sourceObject
         for (specialist in ruleset.specialists.values) {
             for (gpp in specialist.greatPersonPoints)
                 if (gpp.key !in ruleset.units)
                     lines.add(
                         "Specialist ${specialist.name} has greatPersonPoints for ${gpp.key}, which is not a unit in the ruleset!",
-                        RulesetErrorSeverity.Warning
+                        RulesetErrorSeverity.Warning, sourceObject = null
                     )
         }
     }
@@ -435,17 +495,17 @@ class RulesetValidator(val ruleset: Ruleset) {
 
             for (requiredTech: String in building.requiredTechs())
                 if (!ruleset.technologies.containsKey(requiredTech))
-                    lines += "${building.name} requires tech ${requiredTech} which does not exist!"
+                    lines.add("${building.name} requires tech $requiredTech which does not exist!", sourceObject = building)
             for (specialistName in building.specialistSlots.keys)
                 if (!ruleset.specialists.containsKey(specialistName))
-                    lines += "${building.name} provides specialist $specialistName which does not exist!"
+                    lines.add("${building.name} provides specialist $specialistName which does not exist!", sourceObject = building)
             for (resource in building.getResourceRequirementsPerTurn(StateForConditionals.IgnoreConditionals).keys)
                 if (!ruleset.tileResources.containsKey(resource))
-                    lines += "${building.name} requires resource $resource which does not exist!"
+                    lines.add("${building.name} requires resource $resource which does not exist!", sourceObject = building)
             if (building.replaces != null && !ruleset.buildings.containsKey(building.replaces!!))
-                lines += "${building.name} replaces ${building.replaces} which does not exist!"
+                lines.add("${building.name} replaces ${building.replaces} which does not exist!", sourceObject = building)
             if (building.requiredBuilding != null && !ruleset.buildings.containsKey(building.requiredBuilding!!))
-                lines += "${building.name} requires ${building.requiredBuilding} which does not exist!"
+                lines.add("${building.name} requires ${building.requiredBuilding} which does not exist!", sourceObject = building)
             uniqueValidator.checkUniques(building, lines, true, tryFixUnknownUniques)
         }
     }
@@ -466,7 +526,7 @@ class RulesetValidator(val ruleset: Ruleset) {
         tryFixUnknownUniques: Boolean
     ) {
         if (ruleset.units.values.none { it.isCityFounder() })
-            lines += "No city-founding units in ruleset!"
+            lines.add("No city-founding units in ruleset!", sourceObject = null)
 
         for (unit in ruleset.units.values) {
             checkUnitRulesetInvariant(unit, lines)
@@ -496,12 +556,12 @@ class RulesetValidator(val ruleset: Ruleset) {
     }
 
     private fun addPromotionErrorRulesetInvariant(promotion: Promotion, lines: RulesetErrorList) {
-        if (promotion.row < -1) lines += "Promotion ${promotion.name} has invalid row value: ${promotion.row}"
-        if (promotion.column < 0) lines += "Promotion ${promotion.name} has invalid column value: ${promotion.column}"
+        if (promotion.row < -1) lines.add("Promotion ${promotion.name} has invalid row value: ${promotion.row}", sourceObject = promotion)
+        if (promotion.column < 0) lines.add("Promotion ${promotion.name} has invalid column value: ${promotion.column}", sourceObject = promotion)
         if (promotion.row == -1) return
         for (otherPromotion in ruleset.unitPromotions.values)
             if (promotion != otherPromotion && promotion.column == otherPromotion.column && promotion.row == otherPromotion.row)
-                lines += "Promotions ${promotion.name} and ${otherPromotion.name} have the same position: ${promotion.row}/${promotion.column}"
+                lines.add("Promotions ${promotion.name} and ${otherPromotion.name} have the same position: ${promotion.row}/${promotion.column}", sourceObject = promotion)
     }
 
     private fun addNationErrorsRulesetInvariant(
@@ -516,27 +576,24 @@ class RulesetValidator(val ruleset: Ruleset) {
 
     private fun addNationErrorRulesetInvariant(nation: Nation, lines: RulesetErrorList) {
         if (nation.cities.isEmpty() && !nation.isSpectator && !nation.isBarbarian) {
-            lines += "${nation.name} can settle cities, but has no city names!"
+            lines.add("${nation.name} can settle cities, but has no city names!", sourceObject = nation)
         }
 
         // https://www.w3.org/TR/WCAG20/#visual-audio-contrast-contrast
         val constrastRatio = nation.getContrastRatio()
         if (constrastRatio < 3) {
-            val suggestedColors = getSuggestedColors(nation)
-            val newOuterColor = suggestedColors.outerColor
-            val newInnerColor = suggestedColors.innerColor
+            val (newInnerColor, newOuterColor) = getSuggestedColors(nation)
 
             var text = "${nation.name}'s colors do not contrast enough - it is unreadable!"
             text += "\nSuggested colors: "
             text += "\n\t\t\"outerColor\": [${(newOuterColor.r * 255).toInt()}, ${(newOuterColor.g * 255).toInt()}, ${(newOuterColor.b * 255).toInt()}],"
             text += "\n\t\t\"innerColor\": [${(newInnerColor.r * 255).toInt()}, ${(newInnerColor.g * 255).toInt()}, ${(newInnerColor.b * 255).toInt()}],"
 
-            lines.add(text, RulesetErrorSeverity.WarningOptionsOnly)
-            lines.add(text, RulesetErrorSeverity.WarningOptionsOnly)
+            lines.add(text, RulesetErrorSeverity.WarningOptionsOnly, nation)
         }
     }
 
-    data class SuggestedColors(val innerColor: Color, val outerColor:Color)
+    data class SuggestedColors(val innerColor: Color, val outerColor: Color)
 
     private fun getSuggestedColors(nation: Nation): SuggestedColors {
         val innerColorLuminance = getRelativeLuminance(nation.getInnerColor())
@@ -582,37 +639,46 @@ class RulesetValidator(val ruleset: Ruleset) {
         )
             lines.add(
                 "${building.name} is buildable and therefore should either have an explicit cost or reference an existing tech!",
-                RulesetErrorSeverity.Warning
+                RulesetErrorSeverity.Warning, building
             )
 
         for (gpp in building.greatPersonPoints)
             if (gpp.key !in ruleset.units)
                 lines.add(
                     "Building ${building.name} has greatPersonPoints for ${gpp.key}, which is not a unit in the ruleset!",
-                    RulesetErrorSeverity.Warning
+                    RulesetErrorSeverity.Warning, building
                 )
     }
 
     private fun addTechColumnErrorsRulesetInvariant(lines: RulesetErrorList) {
+        // TechColumn is not a IHasUniques and unsuitable as sourceObject
         for (techColumn in ruleset.techColumns) {
             if (techColumn.columnNumber < 0)
-                lines += "Tech Column number ${techColumn.columnNumber} is negative"
-            if (techColumn.buildingCost == -1)
+                lines.add("Tech Column number ${techColumn.columnNumber} is negative", sourceObject = null)
+
+            val buildingsWithoutAssignedCost = ruleset.buildings.values.filter {
+                it.cost == -1 && techColumn.techs.map { it.name }.contains(it.requiredTech) }.toList()
+
+
+            val nonWondersWithoutAssignedCost = buildingsWithoutAssignedCost.filter { !it.isAnyWonder() }
+            if (techColumn.buildingCost == -1 && nonWondersWithoutAssignedCost.any())
                 lines.add(
-                    "Tech Column number ${techColumn.columnNumber} has no explicit building cost",
-                    RulesetErrorSeverity.Warning
+                    "Tech Column number ${techColumn.columnNumber} has no explicit building cost leaving "+nonWondersWithoutAssignedCost.joinToString()+" unassigned",
+                    RulesetErrorSeverity.Warning, sourceObject = null
                 )
-            if (techColumn.wonderCost == -1)
+
+            val wondersWithoutAssignedCost = buildingsWithoutAssignedCost.filter { it.isAnyWonder() }
+            if (techColumn.wonderCost == -1 && wondersWithoutAssignedCost.any())
                 lines.add(
-                    "Tech Column number ${techColumn.columnNumber} has no explicit wonder cost",
-                    RulesetErrorSeverity.Warning
+                    "Tech Column number ${techColumn.columnNumber} has no explicit wonder cost leaving "+wondersWithoutAssignedCost.joinToString()+" unassigned",
+                    RulesetErrorSeverity.Warning, sourceObject = null
                 )
         }
 
         for (tech in ruleset.technologies.values) {
             for (otherTech in ruleset.technologies.values) {
                 if (tech != otherTech && otherTech.column?.columnNumber == tech.column?.columnNumber && otherTech.row == tech.row)
-                    lines += "${tech.name} is in the same row and column as ${otherTech.name}!"
+                    lines.add("${tech.name} is in the same row and column as ${otherTech.name}!", sourceObject = tech)
             }
         }
     }
@@ -644,49 +710,51 @@ class RulesetValidator(val ruleset: Ruleset) {
     }
 
     private fun checkUnitRulesetInvariant(unit: BaseUnit, lines: RulesetErrorList) {
-        if (unit.upgradesTo == unit.name || (unit.upgradesTo != null && unit.upgradesTo == unit.replaces))
-            lines += "${unit.name} upgrades to itself!"
-        if (!unit.isCivilian() && unit.strength == 0)
-            lines += "${unit.name} is a military unit but has no assigned strength!"
-        if (unit.isRanged() && unit.rangedStrength == 0 && !unit.hasUnique(UniqueType.CannotAttack))
-            lines += "${unit.name} is a ranged unit but has no assigned rangedStrength!"
+        for (upgradesTo in unit.getUpgradeUnits(StateForConditionals.IgnoreConditionals)) {
+            if (upgradesTo == unit.name || (upgradesTo == unit.replaces))
+                lines.add("${unit.name} upgrades to itself!", sourceObject = unit)
+        }
+        if (unit.isMilitary() && unit.strength == 0)  // Should only match ranged units with 0 strength
+            lines.add("${unit.name} is a military unit but has no assigned strength!", sourceObject = unit)
     }
 
     /** Collects all RulesetSpecific checks for a BaseUnit */
     private fun checkUnitRulesetSpecific(unit: BaseUnit, lines: RulesetErrorList) {
         for (requiredTech: String in unit.requiredTechs())
             if (!ruleset.technologies.containsKey(requiredTech))
-                lines += "${unit.name} requires tech ${requiredTech} which does not exist!"
-        if (unit.obsoleteTech != null && !ruleset.technologies.containsKey(unit.obsoleteTech!!))
-            lines += "${unit.name} obsoletes at tech ${unit.obsoleteTech} which does not exist!"
-        if (unit.upgradesTo != null && !ruleset.units.containsKey(unit.upgradesTo!!))
-            lines += "${unit.name} upgrades to unit ${unit.upgradesTo} which does not exist!"
+                lines.add("${unit.name} requires tech $requiredTech which does not exist!", sourceObject = unit)
+        for (obsoleteTech: String in unit.techsAtWhichNoLongerAvailable())
+            if (!ruleset.technologies.containsKey(obsoleteTech))
+                lines.add("${unit.name} obsoletes at tech $obsoleteTech which does not exist!", sourceObject = unit)
+        for (upgradesTo in unit.getUpgradeUnits(StateForConditionals.IgnoreConditionals))
+            if (!ruleset.units.containsKey(upgradesTo))
+                lines.add("${unit.name} upgrades to unit $upgradesTo which does not exist!", sourceObject = unit)
 
         // Check that we don't obsolete ourselves before we can upgrade
-        if (unit.upgradesTo!=null && ruleset.units.containsKey(unit.upgradesTo!!)
-            && unit.obsoleteTech!=null && ruleset.technologies.containsKey(unit.obsoleteTech!!)) {
-            val upgradedUnit = ruleset.units[unit.upgradesTo!!]!!
-            for (requiredTech: String in upgradedUnit.requiredTechs())
-                if (requiredTech != unit.obsoleteTech
-                    && !getPrereqTree(unit.obsoleteTech!!).contains(requiredTech)
-                )
-                    lines.add(
-                        "${unit.name} obsoletes at tech ${unit.obsoleteTech}," +
-                            " and therefore ${requiredTech} for its upgrade ${upgradedUnit.name} may not yet be researched!",
-                        RulesetErrorSeverity.Warning
-                    )
-        }
+        for (obsoleteTech: String in unit.techsAtWhichAutoUpgradeInProduction())
+            for (upgradesTo in unit.getUpgradeUnits(StateForConditionals.IgnoreConditionals)) {
+                if (!ruleset.units.containsKey(upgradesTo)) continue
+                if (!ruleset.technologies.containsKey(obsoleteTech)) continue
+                val upgradedUnit = ruleset.units[upgradesTo]!!
+                for (requiredTech: String in upgradedUnit.requiredTechs())
+                    if (requiredTech != obsoleteTech && !getPrereqTree(obsoleteTech).contains(requiredTech))
+                        lines.add(
+                            "${unit.name} is supposed to automatically upgrade at tech ${obsoleteTech}," +
+                                " and therefore $requiredTech for its upgrade ${upgradedUnit.name} may not yet be researched!",
+                            RulesetErrorSeverity.Warning, unit
+                        )
+            }
 
         for (resource in unit.getResourceRequirementsPerTurn(StateForConditionals.IgnoreConditionals).keys)
             if (!ruleset.tileResources.containsKey(resource))
-                lines += "${unit.name} requires resource $resource which does not exist!"
+                lines.add("${unit.name} requires resource $resource which does not exist!", sourceObject = unit)
         if (unit.replaces != null && !ruleset.units.containsKey(unit.replaces!!))
-            lines += "${unit.name} replaces ${unit.replaces} which does not exist!"
+            lines.add("${unit.name} replaces ${unit.replaces} which does not exist!", sourceObject = unit)
         for (promotion in unit.promotions)
             if (!ruleset.unitPromotions.containsKey(promotion))
-                lines += "${unit.name} contains promotion $promotion which does not exist!"
+                lines.add("${unit.name} contains promotion $promotion which does not exist!", sourceObject = unit)
         checkUnitType(unit.unitType) {
-            lines += "${unit.name} is of type ${unit.unitType}, which does not exist!"
+            lines.add("${unit.name} is of type ${unit.unitType}, which does not exist!", sourceObject = unit)
         }
 
         // We should ignore conditionals here - there are condition implementations on this out there that require a game state (and will test false without)
@@ -697,11 +765,9 @@ class RulesetValidator(val ruleset: Ruleset) {
                 unit.isCivilian() &&
                 !unit.isGreatPersonOfType("War")) {
                 lines.add("${unit.name} can place improvement $improvementName which has no stats, preventing unit automation!",
-                    RulesetErrorSeverity.WarningOptionsOnly)
+                    RulesetErrorSeverity.WarningOptionsOnly, unit)
             }
         }
-
-        checkUnitUpgradePath(unit, lines)
     }
 
     // for UnitTypes fallback, used if and only if the 'Ruleset Specific Part' runs,
@@ -717,46 +783,13 @@ class RulesetValidator(val ruleset: Ruleset) {
         reportError()
     }
 
-    /** Maps unit name to a set of all units naming it in its "replaces" property,
-     *  only for units having such a non-empty set, for use in [checkUnitUpgradePath] */
-    private val unitReplacesMap: Map<String, Set<BaseUnit>> by lazy {
-        ruleset.units.values.asSequence()
-            .mapNotNull { it.replaces }.distinct()
-            .associateWith { base ->
-                ruleset.units.values.filter { it.replaces == base }.toSet()
-            }
-    }
-
-    /** Checks all possible upgrade paths of [unit], reporting to [lines].
-     *  @param path used in recursion collecting the BaseUnits seen so far
-     *
-     *  Note: Since the units down the path will also be checked, this could log the same mistakes
-     *  repeatedly, but that is mostly prevented by RulesetErrorList.add(). Each unit involved in a
-     *  loop will still be flagged individually.
-     */
-    private fun checkUnitUpgradePath(
-        unit: BaseUnit,
-        lines: RulesetErrorList,
-        path: Set<BaseUnit> = emptySet()
-    ) {
-        // This is similar to UnitUpgradeManager.getUpgradePath but without the dependency on a Civilization instance
-        // It also branches over all possible nation-unique replacements in one go, since we only look for loops.
-        if (unit in path) {
-            lines += "Circular or self-referencing upgrade path for ${unit.name}"
-            return
-        }
-        val upgrade = ruleset.units[unit.upgradesTo] ?: return
-        val newPath = path + unit // All Set additions are new Sets - we're recursing!
-        val newPathWithReplacements = unitReplacesMap[unit.name]?.let { newPath + it } ?: newPath
-        checkUnitUpgradePath(upgrade, lines, newPathWithReplacements)
-        val replacements = unitReplacesMap[upgrade.name] ?: return
-        for (toCheck in replacements) {
-            checkUnitUpgradePath(toCheck, lines, newPath)
-        }
-    }
-
     private fun checkTilesetSanity(lines: RulesetErrorList) {
-        val tilesetConfigFolder = (ruleset.folderLocation ?: Gdx.files.internal("")).child("jsons\\TileSets")
+        // If running from a jar *and* checking a builtin ruleset, skip this check.
+        // - We can't list() the jsons, and the unit test before relase is sufficient, the tileset config can't have changed since then.
+        if (ruleset.folderLocation == null && this::class.java.`package`?.specificationVersion != null)
+            return
+
+        val tilesetConfigFolder = (ruleset.folderLocation ?: Gdx.files.internal("")).child("jsons/TileSets")
         if (!tilesetConfigFolder.exists()) return
 
         val configTilesets = mutableSetOf<String>()
@@ -774,54 +807,44 @@ class RulesetValidator(val ruleset: Ruleset) {
                     allFallbacks.add(config.fallbackTileSet!!)
             } catch (ex: Exception) {
                 // Our fromJsonFile wrapper already intercepts Exceptions and gives them a generalized message, so go a level deeper for useful details (like "unmatched brace")
-                lines.add("Tileset config '${file.name()}' cannot be loaded (${ex.cause?.message})", RulesetErrorSeverity.Warning)
+                lines.add("Tileset config '${file.name()}' cannot be loaded (${ex.cause?.message})", RulesetErrorSeverity.Warning, sourceObject = null)
             }
         }
 
         // Folder should not contain subdirectories, non-json files, or be empty
         if (folderContentBad)
-            lines.add("The Mod tileset config folder contains non-json files or subdirectories", RulesetErrorSeverity.Warning)
+            lines.add("The Mod tileset config folder contains non-json files or subdirectories", RulesetErrorSeverity.Warning, sourceObject = null)
         if (configTilesets.isEmpty())
-            lines.add("The Mod tileset config folder contains no json files", RulesetErrorSeverity.Warning)
+            lines.add("The Mod tileset config folder contains no json files", RulesetErrorSeverity.Warning, sourceObject = null)
 
         // There should be atlas images corresponding to each json name
         val atlasTilesets = getTilesetNamesFromAtlases()
         val configOnlyTilesets = configTilesets - atlasTilesets
         if (configOnlyTilesets.isNotEmpty())
-            lines.add("Mod has no graphics for configured tilesets: ${configOnlyTilesets.joinToString()}", RulesetErrorSeverity.Warning)
+            lines.add("Mod has no graphics for configured tilesets: ${configOnlyTilesets.joinToString()}", RulesetErrorSeverity.Warning, sourceObject = null)
 
         // For all atlas images matching "TileSets/*" there should be a json
         val atlasOnlyTilesets = atlasTilesets - configTilesets
         if (atlasOnlyTilesets.isNotEmpty())
-            lines.add("Mod has no configuration for tileset graphics: ${atlasOnlyTilesets.joinToString()}", RulesetErrorSeverity.Warning)
+            lines.add("Mod has no configuration for tileset graphics: ${atlasOnlyTilesets.joinToString()}", RulesetErrorSeverity.Warning, sourceObject = null)
 
         // All fallbacks should exist (default added because TileSetCache is not loaded when running as unit test)
         val unknownFallbacks = allFallbacks - TileSetCache.keys - Constants.defaultFallbackTileset
         if (unknownFallbacks.isNotEmpty())
-            lines.add("Fallback tileset invalid: ${unknownFallbacks.joinToString()}", RulesetErrorSeverity.Warning)
+            lines.add("Fallback tileset invalid: ${unknownFallbacks.joinToString()}", RulesetErrorSeverity.Warning, sourceObject = null)
     }
 
-    private fun getTilesetNamesFromAtlases(): Set<String> {
-        // This partially duplicates code in ImageGetter.getAvailableTilesets, but we don't want to reload that singleton cache.
-
-        // Our builtin rulesets have no folderLocation, in that case cheat and apply knowledge about
-        // where the builtin Tileset textures are (correct would be to parse Atlases.json):
-        val files = ruleset.folderLocation?.list("atlas")?.asSequence()
-            ?: sequenceOf(Gdx.files.internal("Tilesets.atlas"))
-        // Next, we need to cope with this running without GL context (unit test) - no TextureAtlas(file)
-        return files
-            .flatMap { file ->
-                TextureAtlasData(file, file.parent(), false).regions.asSequence()
-                    .filter { it.name.startsWith("TileSets/") && !it.name.contains("/Units/") }
-            }.map { it.name.split("/")[1] }
+    private fun getTilesetNamesFromAtlases() =
+        textureNamesCache
+            .filter { it.startsWith("TileSets/") && !it.contains("/Units/") }
+            .map { it.split("/")[1] }
             .toSet()
-    }
 
     private fun checkPromotionCircularReferences(lines: RulesetErrorList) {
         fun recursiveCheck(history: HashSet<Promotion>, promotion: Promotion, level: Int) {
             if (promotion in history) {
                 lines.add("Circular Reference in Promotions: ${history.joinToString("→") { it.name }}→${promotion.name}",
-                    RulesetErrorSeverity.Warning)
+                    RulesetErrorSeverity.Warning, promotion)
                 return
             }
             if (level > 99) return
@@ -841,5 +864,20 @@ class RulesetValidator(val ruleset: Ruleset) {
         }
     }
 
+    private fun checkCivilopediaText(lines: RulesetErrorList) {
+        for (sourceObject in ruleset.allICivilopediaText()) {
+            for ((index, line) in sourceObject.civilopediaText.withIndex()) {
+                for (error in line.unsupportedReasons(this)) {
+                    val nameText = (sourceObject as? INamed)?.name?.plus("'s ") ?: ""
+                    val text = "(${sourceObject::class.java.simpleName}) ${nameText}civilopediaText line ${index + 1}: $error"
+                    lines.add(text, RulesetErrorSeverity.WarningOptionsOnly, sourceObject as? IRulesetObject, null)
+                }
+            }
+        }
+    }
 
+    fun uncachedImageExists(name: String): Boolean {
+        if (ruleset.folderLocation == null) return false // Can't check in this case
+        return textureNamesCache.imageExists(name)
+    }
 }

@@ -8,7 +8,6 @@ import com.badlogic.gdx.utils.Align
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.unique.Unique
-import com.unciv.models.ruleset.validation.RulesetError
 import com.unciv.models.ruleset.validation.RulesetErrorSeverity
 import com.unciv.models.ruleset.validation.UniqueValidator
 import com.unciv.models.translations.tr
@@ -79,6 +78,9 @@ class ModCheckTab(
         modCheckFirstRun = false
         if (modCheckBaseSelect == null) return
 
+        val openedExpanderTitles = modCheckResultTable.children.filterIsInstance<ExpanderTab>()
+            .filter { it.isOpen }.map { it.title }.toSet()
+
         modCheckResultTable.clear()
 
         val rulesetErrors = RulesetCache.loadRulesets()
@@ -93,7 +95,7 @@ class ModCheckTab(
         modCheckBaseSelect!!.isDisabled = true
 
         Concurrency.run("ModChecker") {
-            for (mod in RulesetCache.values.sortedBy { it.name }) {
+            for (mod in RulesetCache.values.sortedBy { it.name }.sortedByDescending { it.name in openedExpanderTitles }) {
                 if (base != MOD_CHECK_WITHOUT_BASE && mod.modOptions.isBaseRuleset) continue
 
                 val modLinks =
@@ -101,8 +103,8 @@ class ModCheckTab(
                     else RulesetCache.checkCombinedModLinks(linkedSetOf(mod.name), base, tryFixUnknownUniques = true)
                 modLinks.sortByDescending { it.errorSeverityToReport }
                 val noProblem = !modLinks.isNotOK()
-                if (modLinks.isNotEmpty()) modLinks += RulesetError("", RulesetErrorSeverity.OK)
-                if (noProblem) modLinks += RulesetError("No problems found.".tr(), RulesetErrorSeverity.OK)
+                if (modLinks.isNotEmpty()) modLinks.add("", RulesetErrorSeverity.OK, sourceObject = null)
+                if (noProblem) modLinks.add("No problems found.".tr(), RulesetErrorSeverity.OK, sourceObject = null)
 
                 launchOnGLThread {
                     // When the options popup is already closed before this postRunnable is run,
@@ -122,7 +124,7 @@ class ModCheckTab(
                         .apply { color = Color.BLACK }
                         .surroundWithCircle(30f, color = iconColor)
 
-                    val expanderTab = ExpanderTab(mod.name, icon = icon, startsOutOpened = false) {
+                    val expanderTab = ExpanderTab(mod.name, icon = icon, startsOutOpened = mod.name in openedExpanderTitles) {
                         it.defaults().align(Align.left)
                         if (!noProblem && mod.folderLocation != null) {
                             val replaceableUniques = getDeprecatedReplaceableUniques(mod)

@@ -43,7 +43,8 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 object ImageGetter {
-    private const val whiteDotLocation = "OtherIcons/whiteDot"
+    const val whiteDotLocation = "OtherIcons/whiteDot"
+    const val circleLocation = "OtherIcons/Circle"
 
     // We use texture atlases to minimize texture swapping - see https://yairm210.medium.com/the-libgdx-performance-guide-1d068a84e181
     lateinit var atlas: TextureAtlas
@@ -58,8 +59,6 @@ object ImageGetter {
     fun resetAtlases() {
         atlases.values.forEach { it.dispose() }
         atlases.clear()
-        atlas = TextureAtlas("game.atlas")
-        atlases["game"] = atlas
     }
 
     fun reloadImages() = setNewRuleset(ruleset)
@@ -68,13 +67,8 @@ object ImageGetter {
     fun setNewRuleset(ruleset: Ruleset) {
         ImageGetter.ruleset = ruleset
         textureRegionDrawables.clear()
-        // These are the drawables from the base game
-        for (region in atlas.regions) {
-            val drawable = TextureRegionDrawable(region)
-            textureRegionDrawables[region.name] = drawable
-        }
 
-        // Load base (except game.atlas which is already loaded)
+        // Load base
         loadModAtlases("", Gdx.files.internal(""))
 
         // These are from the mods
@@ -95,8 +89,8 @@ object ImageGetter {
         // See #4993 - you can't .list() on a jar file, so the ImagePacker leaves us the list of actual atlases.
         val controlFile = folder.child("Atlases.json")
         val fileNames = (if (controlFile.exists()) json().fromJson(Array<String>::class.java, controlFile)
-            else emptyArray()).toMutableList()
-        if (mod.isNotEmpty()) fileNames += "game"
+            else emptyArray()).toMutableSet()
+        if (mod.isNotEmpty()) fileNames += "game"  // Backwards compatibility - when packed by 4.9.15+ this is already in the control file
         for (fileName in fileNames) {
             val file = folder.child("$fileName.atlas")
             if (!file.exists()) continue
@@ -182,14 +176,33 @@ object ImageGetter {
     fun getWhiteDotDrawable() = textureRegionDrawables[whiteDotLocation]!!
     fun getDot(dotColor: Color) = getWhiteDot().apply { color = dotColor }
 
-    fun getExternalImage(fileName: String): Image {
+    /** Finds an image file under /ExtraImages/, including Mods (which can override builtin).
+     *  Extension can be included or is guessed as png/jpg.
+     *  @return `null` if no match found.
+     */
+    fun findExternalImage(name: String): FileHandle? {
+        val folders = ruleset.mods.asSequence().map { Gdx.files.local("mods/$it/ExtraImages") } +
+            sequenceOf(Gdx.files.internal("ExtraImages"))
+        val extensions = sequenceOf("", ".png", ".jpg")
+        return folders.flatMap { folder ->
+            extensions.map { folder.child(name + it) }
+        }.firstOrNull { it.exists() }
+    }
+
+    /** Loads an image on the fly - uncached Texture, not too fast. */
+    fun getExternalImage(file: FileHandle): Image {
         // Since these are not packed in an atlas, they have no scaling filter metadata and
         // default to Nearest filter, anisotropic level 1. Use Linear instead, helps
         // loading screen and Tutorial.WorldScreen quite a bit. More anisotropy barely helps.
-        val texture = Texture("ExtraImages/$fileName")
+        val texture = Texture(file)
         texture.setFilter(TextureFilter.Linear, TextureFilter.Linear)
         return ImageWithCustomSize(TextureRegion(texture))
     }
+    /** Loads an image from (assets)/ExtraImages, from the jar if Unciv runs packaged.
+     *  Cannot load ExtraImages from a Mod - use [findExternalImage] and the [getExternalImage](FileHandle) overload instead.
+     */
+    fun getExternalImage(fileName: String) =
+        getExternalImage(Gdx.files.internal("ExtraImages/$fileName"))
 
     fun getImage(fileName: String?): Image {
         return ImageWithCustomSize(getDrawable(fileName))
@@ -291,7 +304,13 @@ object ImageGetter {
 
     fun religionIconExists(iconName: String) = imageExists("ReligionIcons/$iconName")
 
-    fun getCircle() = getImage("OtherIcons/Circle")
+    fun getCircleDrawable() = getDrawable(circleLocation)
+    fun getCircle() = getImage(circleLocation)
+    fun getCircle(color: Color = Color.WHITE, size: Float? = null) = getCircle().apply {
+        setColor(color)
+        if (size != null) setSize(size, size)
+    }
+
     fun getTriangle() = getImage("OtherIcons/Triangle")
 
     fun getRedCross(size: Float, alpha: Float): Actor {
@@ -311,7 +330,7 @@ object ImageGetter {
             addActor(cross)
         }
 
-    fun getArrowImage(align:Int = Align.right): Image {
+    fun getArrowImage(align: Int = Align.right): Image {
         val image = getImage("OtherIcons/ArrowRight")
         image.setOrigin(Align.center)
         if (align == Align.left) image.rotation = 180f

@@ -19,7 +19,6 @@ import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.skins.SkinCache
 import com.unciv.models.tilesets.TileSetCache
 import com.unciv.models.translations.Translations
-import com.unciv.ui.audio.GameSounds
 import com.unciv.ui.audio.MusicController
 import com.unciv.ui.audio.MusicMood
 import com.unciv.ui.audio.MusicTrackChooserFlags
@@ -38,6 +37,7 @@ import com.unciv.ui.screens.mainmenuscreen.MainMenuScreen
 import com.unciv.ui.screens.savescreens.LoadGameScreen
 import com.unciv.ui.screens.worldscreen.PlayerReadyScreen
 import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.ui.screens.worldscreen.unit.AutoPlay
 import com.unciv.utils.Concurrency
 import com.unciv.utils.DebugUtils
 import com.unciv.utils.Display
@@ -47,14 +47,21 @@ import com.unciv.utils.debug
 import com.unciv.utils.launchOnGLThread
 import com.unciv.utils.withGLContext
 import com.unciv.utils.withThreadPoolContext
+import kotlinx.coroutines.CancellationException
 import java.io.PrintWriter
 import java.util.EnumSet
 import java.util.UUID
-import kotlinx.coroutines.CancellationException
 
+/** Represents the Unciv app itself:
+ *  - implements the [Game] interface Gdx requires.
+ *  - marshals [platform-specific stuff][PlatformSpecific].
+ *  - contains references to [the game being played][gameInfo], and high-level UI elements.
+ */
 open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpecific {
 
     var deepLinkedMultiplayerGame: String? = null
+
+    /** The game currently in progress */
     var gameInfo: GameInfo? = null
 
     lateinit var settings: GameSettings
@@ -103,7 +110,6 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
         settings = files.getGeneralSettings() // needed for the screen
         Display.setScreenMode(settings.screenMode, settings)
         setAsRootScreen(GameStartScreen())  // NOT dependent on any atlas or skin
-        GameSounds.init()
 
         musicController = MusicController()  // early, but at this point does only copy volume from settings
         installAudioHooks()
@@ -175,8 +181,9 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
      * Automatically runs on the appropriate thread.
      *
      * Sets the returned `WorldScreen` as the only active screen.
+     * @param autoPlay pass in the old WorldScreen AutoPlay to retain the state throughout turns. Otherwise leave it is the default.
      */
-    suspend fun loadGame(newGameInfo: GameInfo, callFromLoadScreen: Boolean = false): WorldScreen = withThreadPoolContext toplevel@{
+    suspend fun loadGame(newGameInfo: GameInfo, autoPlay: AutoPlay = AutoPlay(settings.autoPlay), callFromLoadScreen: Boolean = false): WorldScreen = withThreadPoolContext toplevel@{
         val prevGameInfo = gameInfo
         gameInfo = newGameInfo
 
@@ -206,7 +213,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
             screenStack.clear()
 
             worldScreen = null // This allows the GC to collect our old WorldScreen, otherwise we keep two WorldScreens in memory.
-            val newWorldScreen = WorldScreen(newGameInfo, newGameInfo.getPlayerToViewAs(), worldScreenRestoreState)
+            val newWorldScreen = WorldScreen(newGameInfo, autoPlay, newGameInfo.getPlayerToViewAs(), worldScreenRestoreState)
             worldScreen = newWorldScreen
 
             val moreThanOnePlayer = newGameInfo.civilizations.count { it.playerType == PlayerType.Human } > 1
@@ -292,6 +299,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
     fun popScreen(): BaseScreen? {
         if (screenStack.size == 1) {
             musicController.pause()
+            worldScreen?.autoPlay?.stopAutoPlay()
             ConfirmPopup(
                 screen = screenStack.last(),
                 question = "Do you want to exit the game?",
@@ -321,7 +329,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
     fun resetToWorldScreen(): WorldScreen {
         for (screen in screenStack.filter { it !is WorldScreen }) screen.dispose()
         screenStack.removeAll { it !is WorldScreen }
-        val worldScreen= screenStack.last() as WorldScreen
+        val worldScreen = screenStack.last() as WorldScreen
 
         // Re-initialize translations, images etc. that may have been 'lost' when we were playing around in NewGameScreen
         val ruleset = worldScreen.gameInfo.ruleset
@@ -375,7 +383,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
         // already has, but if we do _our_ pause before the MusicController timer notices, it will at least remember the current track.
         if (::musicController.isInitialized) musicController.pause()
         val curGameInfo = gameInfo
-        if (curGameInfo != null) files.requestAutoSave(curGameInfo)
+        if (curGameInfo != null) files.autosaves.requestAutoSave(curGameInfo)
         super.pause()
     }
 
@@ -394,7 +402,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
 
         val curGameInfo = gameInfo
         if (curGameInfo != null) {
-            val autoSaveJob = files.autoSaveJob
+            val autoSaveJob = files.autosaves.autoSaveJob
             if (autoSaveJob != null && autoSaveJob.isActive) {
                 // auto save is already in progress (e.g. started by onPause() event)
                 // let's allow it to finish and do not try to autosave second time
@@ -402,7 +410,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
                     autoSaveJob.join()
                 }
             } else {
-                files.autoSave(curGameInfo)      // NO new thread
+                files.autosaves.autoSave(curGameInfo)      // NO new thread
             }
         }
         settings.save()
@@ -449,7 +457,7 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
     fun goToMainMenu(): MainMenuScreen {
         val curGameInfo = gameInfo
         if (curGameInfo != null) {
-            files.requestAutoSaveUnCloned(curGameInfo) // Can save gameInfo directly because the user can't modify it on the MainMenuScreen
+            files.autosaves.requestAutoSaveUnCloned(curGameInfo) // Can save gameInfo directly because the user can't modify it on the MainMenuScreen
         }
         val mainMenuScreen = MainMenuScreen()
         pushScreen(mainMenuScreen)
@@ -463,11 +471,16 @@ open class UncivGame(val isConsoleMode: Boolean = false) : Game(), PlatformSpeci
 
     companion object {
         //region AUTOMATICALLY GENERATED VERSION DATA - DO NOT CHANGE THIS REGION, INCLUDING THIS COMMENT
-        val VERSION = Version("4.9.2", 932)
+        val VERSION = Version("4.11.14-patch1", 999)
         //endregion
 
+        /** Global reference to the one Gdx.Game instance created by the platform launchers - do not use without checking [isCurrentInitialized] first. */
+        // Set by Gdx Game.create callback, or the special cases ConsoleLauncher and unit tests make do with out Gdx and set this themselves.
         lateinit var Current: UncivGame
+        /** @return `true` if [Current] has been set yet and can be accessed */
         fun isCurrentInitialized() = this::Current.isInitialized
+        /** Get the game currently in progress safely - null either if [Current] has not yet been set or if its gameInfo field has no game */
+        fun getGameInfoOrNull() = if (isCurrentInitialized()) Current.gameInfo else null
         fun isCurrentGame(gameId: String): Boolean = isCurrentInitialized() && Current.gameInfo != null && Current.gameInfo!!.gameId == gameId
         fun isDeepLinkedGameLoading() = isCurrentInitialized() && Current.deepLinkedMultiplayerGame != null
     }
@@ -486,8 +499,7 @@ private class GameStartScreen : BaseScreen() {
     init {
         val logoImage = ImageGetter.getExternalImage("banner.png")
         logoImage.center(stage)
-        logoImage.setOrigin(Align.center)
-        logoImage.color = Color.WHITE.cpy().apply { a = 0f }
+        logoImage.color.a = 0f
         logoImage.addAction(Actions.alpha(1f, 0.3f))
         stage.addActor(logoImage)
     }

@@ -9,6 +9,7 @@ import com.unciv.models.metadata.GameParameters
 import com.unciv.models.ruleset.validation.RulesetError
 import com.unciv.models.ruleset.validation.RulesetErrorList
 import com.unciv.models.ruleset.validation.RulesetErrorSeverity
+import com.unciv.models.ruleset.validation.getRelativeTextDistance
 import com.unciv.utils.Log
 import com.unciv.utils.debug
 
@@ -22,7 +23,7 @@ object RulesetCache : HashMap<String, Ruleset>() {
 
 
     /** Returns error lines from loading the rulesets, so we can display the errors to users */
-    fun loadRulesets(consoleMode: Boolean = false, noMods: Boolean = false) :List<String> {
+    fun loadRulesets(consoleMode: Boolean = false, noMods: Boolean = false): List<String> {
         val newRulesets = HashMap<String, Ruleset>()
 
         for (ruleset in BaseRuleset.values()) {
@@ -171,9 +172,7 @@ object RulesetCache : HashMap<String, Ruleset>() {
         } catch (ex: UncivShowableException) {
             // This happens if a building is dependent on a tech not in the base ruleset
             //  because newRuleset.updateBuildingCosts() in getComplexRuleset() throws an error
-            RulesetErrorList()
-                .apply { add(ex.message, RulesetErrorSeverity.Error) }
+            RulesetErrorList.of(ex.message, RulesetErrorSeverity.Error)
         }
     }
-
 }

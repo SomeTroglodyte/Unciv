@@ -41,7 +41,7 @@ class BasicTests {
     @Test
     fun gamePngExists() {
         Assert.assertTrue("This test will only pass when the game.png exists",
-                Gdx.files.local("game.png").exists())
+                Gdx.files.local("").list().any { it.name().endsWith(".png") })
     }
 
     @Test
@@ -63,12 +63,13 @@ class BasicTests {
 
     // If there's a unit that obsoletes with no upgrade then when it obsoletes
 // and we try to work on its upgrade, we'll get an exception - see techManager
+    // But...Scout obsoletes at Scientific Theory with no upgrade...?
     @Test
     fun allObsoletingUnitsHaveUpgrades() {
         val units: Collection<BaseUnit> = ruleset.units.values
         var allObsoletingUnitsHaveUpgrades = true
         for (unit in units) {
-            if (unit.obsoleteTech != null && unit.upgradesTo == null && unit.name !="Scout" ) {
+            if (unit.techsAtWhichAutoUpgradeInProduction().any() && unit.upgradesTo == null && unit.name !="Scout" ) {
                 debug("%s obsoletes but has no upgrade", unit.name)
                 allObsoletingUnitsHaveUpgrades = false
             }
@@ -109,7 +110,7 @@ class BasicTests {
                 for (paramType in entry.value) {
                     if (paramType == UniqueParameterType.Unknown) {
                         val badParam = uniqueType.text.getPlaceholderParameters()[entry.index]
-                        debug("%s param[%s] type \"%s\" is unknown", uniqueType.name, entry.index, badParam)
+                        println("${uniqueType.name} param[${entry.index}] type \"$badParam\" is unknown")
                         noUnknownParameters = false
                     }
                 }

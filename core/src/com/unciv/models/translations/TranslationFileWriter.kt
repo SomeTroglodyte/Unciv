@@ -10,6 +10,7 @@ import com.unciv.models.metadata.BaseRuleset
 import com.unciv.models.metadata.GameSettings.LocaleCode
 import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.Building
+import com.unciv.models.ruleset.Event
 import com.unciv.models.ruleset.GlobalUniques
 import com.unciv.models.ruleset.PolicyBranch
 import com.unciv.models.ruleset.Quest
@@ -315,8 +316,7 @@ object TranslationFileWriter {
                 val filename = jsonFile.nameWithoutExtension()
 
                 val javaClass = getJavaClassByName(filename)
-                if (javaClass == this.javaClass)
-                    continue // unknown JSON, let's skip it
+                    ?: continue // unknown JSON, let's skip it
 
                 val array = json().fromJsonFile(javaClass, jsonFile.path())
 
@@ -363,19 +363,23 @@ object TranslationFileWriter {
                 return
             }
 
+            // Do simpler parameter numbering when typed, as the code below is susceptible to problems with nested brackets - UniqueTypes don't have them (yet)!
+            if (unique.type != null) {
+                for ((index, typeList) in unique.type.parameterTypeMap.withIndex()) {
+                    if (typeList.none { it in translatableUniqueParameterTypes }) continue
+                    // Unknown/Comment parameter contents better be offered to translators too
+                    resultStrings.add("${unique.params[index]} = ")
+                }
+                resultStrings.add("${unique.type.getTranslatable()} = ")
+                return
+            }
+
             val parameterNames = ArrayList<String>()
-            for ((index, parameter) in unique.params.withIndex()) {
-                val parameterName =
-                    if (unique.type != null) {
-                        val possibleParameterTypes = unique.type.parameterTypeMap[index]
-                        // for multiple types. will look like "[unitName/buildingName]"
-                        possibleParameterTypes.joinToString("/") { it.parameterName }
-                    } else {
-                        UniqueParameterType.guessTypeForTranslationWriter(parameter, ruleset).parameterName
-                    }
+            for (parameter in unique.params) {
+                val parameterName = UniqueParameterType.guessTypeForTranslationWriter(parameter, ruleset).parameterName
                 parameterNames.addNumberedParameter(parameterName)
-                if (parameterName == UniqueParameterType.Unknown.parameterName)
-                    resultStrings.add("$parameter = ")  // Unknown parameter contents better be offered to translators too
+                if (translatableUniqueParameterTypes.none { it.parameterName == parameterName }) continue
+                resultStrings.add("$parameter = ")
             }
             resultStrings.add("${stringToTranslate.fillPlaceholders(*parameterNames.toTypedArray())} = ")
         }
@@ -465,6 +469,13 @@ object TranslationFileWriter {
             /** Specifies Enums where the name property _is_ translatable, by Class name */
             private val translatableEnumsSet = setOf("BeliefType")
 
+            /** Only these Unique parameter types will be offered as translatables - for all others it is expected their content
+             *  corresponds with a ruleset object name which will be made translatable by their actual json definition */
+            private val translatableUniqueParameterTypes = setOf(
+                UniqueParameterType.Unknown,
+                UniqueParameterType.Comment
+            )
+
             private fun isFieldTypeRelevant(type: Class<*>) =
                     type == String::class.java ||
                     type == java.util.ArrayList::class.java ||
@@ -485,13 +496,14 @@ object TranslationFileWriter {
                         (clazz.componentType?.simpleName ?: clazz.simpleName) + "." + field.name !in untranslatableFieldSet
             }
 
-            private fun getJavaClassByName(name: String): Class<Any> {
+            private fun getJavaClassByName(name: String): Class<Any>? {
                 return when (name) {
                     "Beliefs" -> emptyArray<Belief>().javaClass
                     "Buildings" -> emptyArray<Building>().javaClass
+                    "CityStateTypes" -> emptyArray<CityStateType>().javaClass
                     "Difficulties" -> emptyArray<Difficulty>().javaClass
                     "Eras" -> emptyArray<Era>().javaClass
-                    "Speeds" -> emptyArray<Speed>().javaClass
+                    "Events" -> emptyArray<Event>().javaClass
                     "GlobalUniques" -> GlobalUniques().javaClass
                     "Nations" -> emptyArray<Nation>().javaClass
                     "Policies" -> emptyArray<PolicyBranch>().javaClass
@@ -499,6 +511,7 @@ object TranslationFileWriter {
                     "Religions" -> emptyArray<String>().javaClass
                     "Ruins" -> emptyArray<RuinReward>().javaClass
                     "Specialists" -> emptyArray<Specialist>().javaClass
+                    "Speeds" -> emptyArray<Speed>().javaClass
                     "Techs" -> emptyArray<TechColumn>().javaClass
                     "Terrains" -> emptyArray<Terrain>().javaClass
                     "TileImprovements" -> emptyArray<TileImprovement>().javaClass
@@ -508,8 +521,7 @@ object TranslationFileWriter {
                     "Units" -> emptyArray<BaseUnit>().javaClass
                     "UnitTypes" -> emptyArray<UnitType>().javaClass
                     "VictoryTypes" -> emptyArray<Victory>().javaClass
-                    "CityStateTypes" -> emptyArray<CityStateType>().javaClass
-                    else -> this.javaClass // dummy value
+                    else -> null // dummy value
                 }
             }
         }

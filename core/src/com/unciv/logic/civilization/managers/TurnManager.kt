@@ -15,7 +15,8 @@ import com.unciv.logic.civilization.diplomacy.DiplomacyTurnManager.nextTurn
 import com.unciv.logic.map.mapunit.UnitTurnManager
 import com.unciv.logic.map.tile.Tile
 import com.unciv.logic.trade.TradeEvaluation
-import com.unciv.models.ruleset.ModOptionsConstants
+import com.unciv.models.ruleset.unique.StateForConditionals
+import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unique.endTurn
 import com.unciv.models.stats.Stats
@@ -31,7 +32,7 @@ class TurnManager(val civInfo: Civilization) {
 
     fun startTurn(progressBar: NextTurnProgress? = null) {
         if (civInfo.isSpectator()) return
-        
+
         civInfo.threatManager.clear()
         if (civInfo.isMajorCiv() && civInfo.isAlive()) {
             civInfo.statsHistory.recordRankingStats(civInfo)
@@ -39,7 +40,6 @@ class TurnManager(val civInfo: Civilization) {
 
         if (civInfo.cities.isNotEmpty() && civInfo.gameInfo.ruleset.technologies.isNotEmpty())
             civInfo.tech.updateResearchProgress()
-
 
         civInfo.cache.updateCivResources() // If you offered a trade last turn, this turn it will have been accepted/declined
         for (stockpiledResource in civInfo.getCivResourceSupply().filter { it.resource.isStockpiled() })
@@ -50,16 +50,18 @@ class TurnManager(val civInfo: Civilization) {
         civInfo.updateStatsForNextTurn() // for things that change when turn passes e.g. golden age, city state influence
 
         // Do this after updateStatsForNextTurn but before cities.startTurn
-        if (civInfo.playerType == PlayerType.AI && civInfo.gameInfo.ruleset.modOptions.uniques.contains(
-                    ModOptionsConstants.convertGoldToScience))
+        if (civInfo.playerType == PlayerType.AI && civInfo.gameInfo.ruleset.modOptions.hasUnique(UniqueType.ConvertGoldToScience))
             NextTurnAutomation.automateGoldToSciencePercentage(civInfo)
 
         // Generate great people at the start of the turn,
         // so they won't be generated out in the open and vulnerable to enemy attacks before you can control them
         if (civInfo.cities.isNotEmpty()) { //if no city available, addGreatPerson will throw exception
-            val greatPerson = civInfo.greatPeople.getNewGreatPerson()
-            if (greatPerson != null && civInfo.gameInfo.ruleset.units.containsKey(greatPerson))
-                civInfo.units.addUnit(greatPerson)
+            var greatPerson = civInfo.greatPeople.getNewGreatPerson()
+            while (greatPerson != null) {
+                if (civInfo.gameInfo.ruleset.units.containsKey(greatPerson))
+                    civInfo.units.addUnit(greatPerson)
+                greatPerson = civInfo.greatPeople.getNewGreatPerson()
+            }
             civInfo.religionManager.startTurn()
             if (civInfo.isLongCountActive())
                 MayaCalendar.startTurnForMaya(civInfo)
@@ -225,6 +227,12 @@ class TurnManager(val civInfo: Civilization) {
 
 
     fun endTurn(progressBar: NextTurnProgress? = null) {
+        if (UncivGame.Current.settings.citiesAutoBombardAtEndOfTurn)
+            NextTurnAutomation.automateCityBombardment(civInfo) // Bombard with all cities that haven't, maybe you missed one
+
+        for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponTurnEnd, StateForConditionals(civInfo)))
+            UniqueTriggerActivation.triggerUnique(unique, civInfo)
+
         val notificationsLog = civInfo.notificationsLog
         val notificationsThisTurn = Civilization.NotificationsLog(civInfo.gameInfo.turns)
         notificationsThisTurn.notifications.addAll(civInfo.notifications)
@@ -251,8 +259,10 @@ class TurnManager(val civInfo: Civilization) {
         civInfo.policies.endTurn(nextTurnStats.culture.toInt())
         civInfo.totalCultureForContests += nextTurnStats.culture.toInt()
 
-        if (civInfo.isCityState())
+        if (civInfo.isCityState()) {
             civInfo.questManager.endTurn()
+            civInfo.cityStateFunctions.nextTurnElections()
+        }
 
         // disband units until there are none left OR the gold values are normal
         if (!civInfo.isBarbarian() && civInfo.gold <= -200 && nextTurnStats.gold.toInt() < 0) {

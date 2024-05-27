@@ -8,6 +8,12 @@ import com.unciv.models.stats.Stat
 private val unCamelCaseRegex = Regex("([A-Z])([A-Z])([a-z])|([a-z])([A-Z])")
 private fun unCamelCase(name: String) = unCamelCaseRegex.replace(name, """$1$4 $2$3$5""")
 
+/**
+ *  This is the database of supported "bindable" keyboard shortcuts.
+ *
+ *  Note a label is automatically generated from the name by inserting spaces before each uppercase letter (except the initial one),
+ *  and translation keys are automatically generated for all labels. This also works for [KeyboardBinding.Category].
+ */
 enum class KeyboardBinding(
     val category: Category,
     label: String? = null,
@@ -19,6 +25,7 @@ enum class KeyboardBinding(
     None(Category.None, KeyCharAndCode.UNKNOWN),
 
     // MainMenu
+    QuitMainMenu(Category.MainMenu, "Quit", KeyCharAndCode.BACK),
     Resume(Category.MainMenu),
     Quickstart(Category.MainMenu),
     StartNewGame(Category.MainMenu, "Start new game", KeyCharAndCode('N')),  // Not to be confused with NewGame (from World menu, Ctrl-N)
@@ -26,14 +33,19 @@ enum class KeyboardBinding(
     Multiplayer(Category.MainMenu),  // Name disambiguation maybe soon, not yet necessary
     MapEditor(Category.MainMenu, "Map editor", KeyCharAndCode('E')),
     ModManager(Category.MainMenu, "Mods", KeyCharAndCode('D')),
+    Scenarios(Category.MainMenu, "Scenarios", KeyCharAndCode('S')),
     MainMenuOptions(Category.MainMenu, "Options", KeyCharAndCode('O')),  // Separate binding from World where it's Ctrl-O default
 
     // Worldscreen
+    DeselectOrQuit(Category.WorldScreen, "Deselect then Quit", KeyCharAndCode.BACK),
     Menu(Category.WorldScreen, KeyCharAndCode.TAB),
     NextTurn(Category.WorldScreen),
     NextTurnAlternate(Category.WorldScreen, KeyCharAndCode.SPACE),
+    AutoPlayMenu(Category.WorldScreen, "Open AutoPlay menu", KeyCharAndCode.UNKNOWN),  // 'a' is already assigned to map panning
+    AutoPlay(Category.WorldScreen, "Start AutoPlay", KeyCharAndCode.ctrl('a')),
     EmpireOverview(Category.WorldScreen),
     MusicPlayer(Category.WorldScreen, KeyCharAndCode.ctrl('m')),
+    DeveloperConsole(Category.WorldScreen, '`'),
 
     /*
      * These try to be faithful to default Civ5 key bindings as found in several places online
@@ -88,6 +100,7 @@ enum class KeyboardBinding(
     // here as it will not be guaranteed to already be fully initialized.
     SwapUnits(Category.UnitActions,"Swap units", 'y'),
     Automate(Category.UnitActions, 'm'),
+    ConnectRoad(Category.UnitActions, "Connect road", 'c'),
     StopAutomation(Category.UnitActions,"Stop automation", 'm'),
     StopMovement(Category.UnitActions,"Stop movement", '.'),
     ShowUnitDestination(Category.UnitActions, "Show unit destination", 'j'),
@@ -124,6 +137,16 @@ enum class KeyboardBinding(
     ShowAdditionalActions(Category.UnitActions,"Show more", Input.Keys.PAGE_DOWN),
     HideAdditionalActions(Category.UnitActions,"Back", Input.Keys.PAGE_UP),
     AddInCapital(Category.UnitActions, "Add in capital", 'g'),
+
+    // The AutoPlayMenu reuses the AutoPlay binding, under Worldscreen above - otherwise clear labeling would be tricky
+    AutoPlayMenuEndTurn(Category.AutoPlayMenu, "AutoPlay End Turn", 't'),
+    AutoPlayMenuMilitary(Category.AutoPlayMenu, "AutoPlay Military Once", 'm'),
+    AutoPlayMenuCivilians(Category.AutoPlayMenu, "AutoPlay Civilians Once", 'c'),
+    AutoPlayMenuEconomy(Category.AutoPlayMenu, "AutoPlay Economy Once", 'e'),
+
+    // NextTurnMenu
+    NextTurnMenuNextTurn(Category.NextTurnMenu, "Next Turn", 'n'),
+    NextTurnMenuMoveAutomatedUnits(Category.NextTurnMenu, "Move Automated Units", 'm'),
 
     // City Screen
     AddConstruction(Category.CityScreen, "Add to or remove from queue", KeyCharAndCode.RETURN),
@@ -164,10 +187,29 @@ enum class KeyboardBinding(
     AddConstructionAllTop(Category.CityScreenConstructionMenu, "Add or move to the top in all cities", KeyCharAndCode.ctrl('t')),
     RemoveConstructionAll(Category.CityScreenConstructionMenu, "Remove from the queue in all cities", KeyCharAndCode.ctrl('r')),
 
+    // Civilopedia
+    PediaBuildings(Category.Civilopedia, "Buildings", 'b'),
+    PediaWonders(Category.Civilopedia, "Wonders", 'w'),
+    PediaResources(Category.Civilopedia, "Resources", 'r'),
+    PediaTerrains(Category.Civilopedia, "Terrains", 't'),
+    PediaImprovements(Category.Civilopedia, "Tile Improvements", 'i'),
+    PediaUnits(Category.Civilopedia, "Units", 'u'),
+    PediaUnitTypes(Category.Civilopedia, "Unit types", 'y'),
+    PediaNations(Category.Civilopedia, "Nations", 'n'),
+    PediaTechnologies(Category.Civilopedia, "Technologies", KeyCharAndCode.ctrl('t')),
+    PediaPromotions(Category.Civilopedia, "Promotions", 'p'),
+    PediaPolicies(Category.Civilopedia, "Policies", 'o'),
+    PediaBeliefs(Category.Civilopedia, "Religions and Beliefs", 'f'),
+    PediaTutorials(Category.Civilopedia, "Tutorials", Input.Keys.F1),
+    PediaDifficulties(Category.Civilopedia, "Difficulty levels", 'd'),
+    PediaEras(Category.Civilopedia, "Eras", 'e'),
+    PediaSpeeds(Category.Civilopedia, "Speeds", 's'),
+    PediaSearch(Category.Civilopedia, "Open the Search Dialog", KeyCharAndCode.ctrl('f')),
+
     // Popups
     Confirm(Category.Popups, "Confirm Dialog", 'y'),
     Cancel(Category.Popups, "Cancel Dialog", 'n'),
-    UpgradeAll(Category.Popups, KeyCharAndCode.ctrl('a')),
+    UpgradeAll(Category.Popups, KeyCharAndCode.ctrl('a')),  // rethink? No UnitUpgradeMenu category, but CityScreenConstructionMenu gets one?
     ;
     //endregion
 
@@ -178,6 +220,12 @@ enum class KeyboardBinding(
             // Conflict checking within group plus keys assigned to UnitActions are a problem
             override fun checkConflictsIn() = sequenceOf(this, MapPanning, UnitActions)
         },
+        AutoPlayMenu {
+            override val label = "AutoPlay menu" // adapt to existing usage
+        },
+        NextTurnMenu {
+            override val label = "NextTurn menu" // adapt to existing usage
+        },
         MapPanning {
             override fun checkConflictsIn() = sequenceOf(this, WorldScreen)
         },
@@ -187,9 +235,10 @@ enum class KeyboardBinding(
         },
         CityScreen,
         CityScreenConstructionMenu, // Maybe someday a category hierarchy?
+        Civilopedia,
         Popups
         ;
-        val label = unCamelCase(name)
+        open val label = unCamelCase(name)
         open fun checkConflictsIn() = sequenceOf(this)
     }
 

@@ -11,6 +11,8 @@ import com.unciv.logic.MissingModsException
 import com.unciv.logic.UncivShowableException
 import com.unciv.logic.files.PlatformSaverLoader
 import com.unciv.logic.files.UncivFiles
+import com.unciv.logic.github.Github
+import com.unciv.logic.github.Github.folderNameToRepoName
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
@@ -26,8 +28,6 @@ import com.unciv.ui.components.input.onClick
 import com.unciv.ui.popups.LoadingPopup
 import com.unciv.ui.popups.Popup
 import com.unciv.ui.popups.ToastPopup
-import com.unciv.ui.screens.pickerscreens.Github
-import com.unciv.ui.screens.pickerscreens.Github.folderNameToRepoName
 import com.unciv.utils.Concurrency
 import com.unciv.utils.Log
 import com.unciv.utils.launchOnGLThread
@@ -71,7 +71,7 @@ class LoadGameScreen : LoadOrSaveScreen() {
                     }
                 }
                 else -> {
-                    errorText.append("Unhandled problem, [${ex::class.simpleName} ${ex.localizedMessage}]".tr())
+                    errorText.append("Unhandled problem, [${ex::class.simpleName} ${ex.stackTraceToString()}]".tr())
                     isUserFixable = false
                 }
             }
@@ -127,7 +127,7 @@ class LoadGameScreen : LoadOrSaveScreen() {
             try {
                 // This is what can lead to ANRs - reading the file and setting the transients, that's why this is in another thread
                 val loadedGame = game.files.loadGameFromFile(selectedSave!!)
-                game.loadGame(loadedGame, true)
+                game.loadGame(loadedGame, callFromLoadScreen = true)
             } catch (notAPlayer: UncivShowableException) {
                 launchOnGLThread {
                     val (message) = getLoadExceptionMessage(notAPlayer)
@@ -153,7 +153,7 @@ class LoadGameScreen : LoadOrSaveScreen() {
                 try {
                     val clipboardContentsString = Gdx.app.clipboard.contents.trim()
                     val loadedGame = UncivFiles.gameInfoFromString(clipboardContentsString)
-                    game.loadGame(loadedGame, true)
+                    game.loadGame(loadedGame, callFromLoadScreen = true)
                 } catch (ex: Exception) {
                     launchOnGLThread { handleLoadGameException(ex, "Could not load game from clipboard!") }
                 } finally {
@@ -179,7 +179,7 @@ class LoadGameScreen : LoadOrSaveScreen() {
             Concurrency.run(Companion.loadFromCustomLocation) {
                 game.files.loadGameFromCustomLocation(
                     {
-                        Concurrency.run { game.loadGame(it, true) }
+                        Concurrency.run { game.loadGame(it, callFromLoadScreen = true) }
                     },
                     {
                         if (it !is PlatformSaverLoader.Cancelled)

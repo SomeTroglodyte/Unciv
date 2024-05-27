@@ -2,6 +2,7 @@ package com.unciv.logic.civilization
 
 import com.badlogic.gdx.math.Vector2
 import com.unciv.Constants
+import com.unciv.UncivGame
 import com.unciv.json.HashMapVector2
 import com.unciv.logic.GameInfo
 import com.unciv.logic.IsPartOfGameInfoSerialization
@@ -40,9 +41,11 @@ import com.unciv.models.ruleset.Victory
 import com.unciv.models.ruleset.nation.CityStateType
 import com.unciv.models.ruleset.nation.Difficulty
 import com.unciv.models.ruleset.nation.Nation
+import com.unciv.models.ruleset.nation.Personality
 import com.unciv.models.ruleset.tech.Era
 import com.unciv.models.ruleset.tile.ResourceSupplyList
 import com.unciv.models.ruleset.tile.ResourceType
+import com.unciv.models.ruleset.tile.TileImprovement
 import com.unciv.models.ruleset.tile.TileResource
 import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.TemporaryUnique
@@ -55,6 +58,7 @@ import com.unciv.models.stats.Stats
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.toPercent
 import com.unciv.ui.screens.victoryscreen.RankingType
+import org.jetbrains.annotations.VisibleForTesting
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -89,7 +93,7 @@ class Civilization : IsPartOfGameInfoSerialization {
 
     @Transient
     val units = UnitManager(this)
-    
+
     @Transient
     var threatManager = ThreatManager(this)
 
@@ -126,10 +130,6 @@ class Civilization : IsPartOfGameInfoSerialization {
     var passThroughImpassableUnlocked = false   // Cached Boolean equal to passableImpassables.isNotEmpty()
 
     @Transient
-    var nonStandardTerrainDamage = false
-
-
-    @Transient
     var thingsToFocusOnForVictory = setOf<Victory.Focus>()
 
     @Transient
@@ -142,7 +142,16 @@ class Civilization : IsPartOfGameInfoSerialization {
     /** The Civ's gold reserves. Public get, private set - please use [addGold] method to modify. */
     var gold = 0
         private set
+
+    /** The Civ's name
+     *
+     *  - must always be equal to Nation.name (except in the unit test code, where only local consistency is needed)
+     *  - used as uniquely identifying key, so no two players can used the same Nation
+     *  - Displayed and translated as-is
+     */
     var civName = ""
+        private set
+
     var tech = TechManager()
     var policies = PolicyManager()
     var civConstructions = CivConstructions()
@@ -294,6 +303,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.hasMovedAutomatedUnits = hasMovedAutomatedUnits
         toReturn.statsHistory = statsHistory.clone()
         toReturn.resourceStockpiles = resourceStockpiles.clone()
+        toReturn.cityStateTurnsUntilElection = cityStateTurnsUntilElection
         return toReturn
     }
 
@@ -321,14 +331,24 @@ class Civilization : IsPartOfGameInfoSerialization {
      *  city-states to contain the barbarians. Therefore, [getKnownCivs] will **not** list the barbarians
      *  for major civs, but **will** do so for city-states after some gameplay.
      */
-    fun getKnownCivs() = diplomacy.values.asSequence().map { it.otherCiv() }.filter { !it.isDefeated() }
+    fun getKnownCivs() = diplomacy.values.asSequence().map { it.otherCiv() }
+        .filter { !it.isDefeated() && !it.isSpectator() }
+
+    fun getKnownCivsWithSpectators() = diplomacy.values.asSequence().map { it.otherCiv() }
+        .filter { !it.isDefeated() }
+
     fun knows(otherCivName: String) = diplomacy.containsKey(otherCivName)
     fun knows(otherCiv: Civilization) = knows(otherCiv.civName)
 
-    fun getCapital(firstCityIfNoCapital: Boolean = false) = cities.firstOrNull { it.isCapital() } ?:
+    fun getCapital(firstCityIfNoCapital: Boolean = true) = cities.firstOrNull { it.isCapital() } ?:
         if (firstCityIfNoCapital) cities.firstOrNull() else null
     fun isHuman() = playerType == PlayerType.Human
     fun isAI() = playerType == PlayerType.AI
+    fun isAIOrAutoPlaying(): Boolean {
+        if (playerType == PlayerType.AI) return true
+        val worldScreen = UncivGame.Current.worldScreen ?: return false
+        return worldScreen.viewingCiv == this && worldScreen.autoPlay.isAutoPlaying()
+    }
     fun isOneCityChallenger() = playerType == PlayerType.Human && gameInfo.gameParameters.oneCityChallenge
 
     fun isCurrentPlayer() = gameInfo.currentPlayerCiv == this
@@ -344,32 +364,48 @@ class Civilization : IsPartOfGameInfoSerialization {
     var cityStatePersonality: CityStatePersonality = CityStatePersonality.Neutral
     var cityStateResource: String? = null
     var cityStateUniqueUnit: String? = null // Unique unit for militaristic city state. Might still be null if there are no appropriate units
-
+    var cityStateTurnsUntilElection: Int = 0
 
     fun hasMetCivTerritory(otherCiv: Civilization): Boolean =
             otherCiv.getCivTerritory().any { gameInfo.tileMap[it].isExplored(this) }
     fun getCompletedPolicyBranchesCount(): Int = policies.adoptedPolicies.count { Policy.isBranchCompleteByName(it) }
-    fun originalMajorCapitalsOwned(): Int = cities.count { it.isOriginalCapital && it.foundingCiv != "" && gameInfo.getCivilization(it.foundingCiv).isMajorCiv() }
     private fun getCivTerritory() = cities.asSequence().flatMap { it.tiles.asSequence() }
 
-    fun getPreferredVictoryType(): String {
+    fun getPreferredVictoryTypes(): List<String> {
         val victoryTypes = gameInfo.gameParameters.victoryTypes
         if (victoryTypes.size == 1)
-            return victoryTypes.first() // That is the most relevant one
-        val victoryType = nation.preferredVictoryType
-        return if (victoryType in gameInfo.ruleset.victories) victoryType
-               else Constants.neutralVictoryType
+            return listOf(victoryTypes.first()) // That is the most relevant one
+        val victoryType: List<String> = listOf(nation.preferredVictoryType, getPersonality().preferredVictoryType)
+            .filter { it in gameInfo.gameParameters.victoryTypes }
+        return victoryType.ifEmpty { listOf(Constants.neutralVictoryType) }
+
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
-    fun getPreferredVictoryTypeObject(): Victory? {
-        val preferredVictoryType = getPreferredVictoryType()
-        return if (preferredVictoryType == Constants.neutralVictoryType) null
-               else gameInfo.ruleset.victories[getPreferredVictoryType()]!!
+    fun getPreferredVictoryTypeObjects(): List<Victory> {
+        val preferredVictoryTypes = getPreferredVictoryTypes()
+        return if (preferredVictoryTypes.contains(Constants.neutralVictoryType)) emptyList()
+               else preferredVictoryTypes.map { gameInfo.ruleset.victories[it]!! }
+    }
+
+    fun wantsToFocusOn(focus: Stat): Boolean {
+        return when(focus) {
+            Stat.Culture -> wantsToFocusOn(Victory.Focus.Culture)
+            Stat.Science -> wantsToFocusOn(Victory.Focus.Science)
+            Stat.Production -> wantsToFocusOn(Victory.Focus.Production)
+            Stat.Gold -> wantsToFocusOn(Victory.Focus.Gold)
+            Stat.Faith -> wantsToFocusOn(Victory.Focus.Faith)
+            else -> false
+        }
     }
 
     fun wantsToFocusOn(focus: Victory.Focus): Boolean {
-        return thingsToFocusOnForVictory.contains(focus)
+        return thingsToFocusOnForVictory.contains(focus) && isAIOrAutoPlaying()
+    }
+
+    fun getPersonality(): Personality {
+        return if (isAIOrAutoPlaying()) gameInfo.ruleset.personalities[nation.personality] ?: Personality.neutralPersonality
+        else Personality.neutralPersonality
     }
 
     @Transient
@@ -381,7 +417,9 @@ class Civilization : IsPartOfGameInfoSerialization {
     fun updateStatsForNextTurn() {
         val previousHappiness = stats.happiness
         stats.happiness = stats.getHappinessBreakdown().values.sum().roundToInt()
-        if (stats.happiness != previousHappiness)
+        if (stats.happiness != previousHappiness && gameInfo.ruleset.allHappinessLevelsThatAffectUniques.any {
+            stats.happiness < it != previousHappiness < it // If move from being below them to not, or vice versa
+            })
             for (city in cities) city.cityStats.update(updateCivStats = false)
         stats.statsForNextTurn = stats.getStatMapForNextTurn().values.reduce { a, b -> a + b }
     }
@@ -399,7 +437,7 @@ class Civilization : IsPartOfGameInfoSerialization {
 
         for (resourceSupply in detailedCivResources) {
             if (resourceSupply.resource.isStockpiled()) continue
-            if (resourceSupply.resource.hasUnique(UniqueType.CannotBeTraded)) continue
+            if (resourceSupply.resource.hasUnique(UniqueType.CannotBeTraded, StateForConditionals(this))) continue
             // If we got it from another trade or from a CS, preserve the origin
             if (resourceSupply.isCityStateOrTradeOrigin()) {
                 newResourceSupplyList.add(resourceSupply.copy())
@@ -432,7 +470,7 @@ class Civilization : IsPartOfGameInfoSerialization {
     /** Gets the number of resources available to this city
      * Does not include city-wide resources
      * Returns 0 for undefined resources */
-    fun getResourceAmount(resourceName:String): Int {
+    fun getResourceAmount(resourceName: String): Int {
         return getCivResourcesByName()[resourceName] ?: 0
     }
 
@@ -471,7 +509,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         yieldAll(cityStateFunctions.getUniquesProvidedByCityStates(uniqueType, stateForConditionals))
         if (religionManager.religion != null)
             yieldAll(religionManager.religion!!.getFounderUniques()
-                .filter { it.isOfType(uniqueType) && it.conditionalsApply(stateForConditionals) })
+                .filter { !it.isTimedTriggerable && it.type == uniqueType && it.conditionalsApply(stateForConditionals) })
 
         yieldAll(getCivResourceSupply().asSequence()
             .filter { it.amount > 0 }
@@ -484,16 +522,20 @@ class Civilization : IsPartOfGameInfoSerialization {
     fun getTriggeredUniques(
         trigger: UniqueType,
         stateForConditionals: StateForConditionals = StateForConditionals(this)
-    ) : Sequence<Unique> = sequence {
+    ) : Iterable<Unique> = sequence {
         yieldAll(nation.uniqueMap.getTriggeredUniques(trigger, stateForConditionals))
         yieldAll(cities.asSequence()
             .flatMap { city -> city.cityConstructions.builtBuildingUniqueMap.getTriggeredUniques(trigger, stateForConditionals) }
         )
+        if (religionManager.religion != null)
+            yieldAll(religionManager.religion!!.getFounderUniques()
+                .filter { unique -> unique.conditionals.any { it.type == trigger }
+                    && unique.conditionalsApply(stateForConditionals) })
         yieldAll(policies.policyUniques.getTriggeredUniques(trigger, stateForConditionals))
         yieldAll(tech.techUniques.getTriggeredUniques(trigger, stateForConditionals))
         yieldAll(getEra().uniqueMap.getTriggeredUniques (trigger, stateForConditionals))
         yieldAll(gameInfo.ruleset.globalUniques.uniqueMap.getTriggeredUniques(trigger, stateForConditionals))
-    }
+    }.toList() // Triggers can e.g. add buildings which contain triggers, causing concurrent modification errors
 
     fun matchesFilter(filter: String): Boolean {
         return MultiFilter.multiFilter(filter, ::matchesSingleFilter)
@@ -529,6 +571,22 @@ class Civilization : IsPartOfGameInfoSerialization {
         return baseBuilding
     }
 
+    fun getEquivalentTileImprovement(tileImprovementName: String): TileImprovement {
+        val tileImprovement = gameInfo.ruleset.tileImprovements[tileImprovementName]
+            ?: throw UncivShowableException("Improvement $tileImprovementName doesn't seem to exist!")
+        return getEquivalentTileImprovement(tileImprovement)
+    }
+
+    fun getEquivalentTileImprovement(tileImprovement: TileImprovement): TileImprovement {
+        if (tileImprovement.replaces != null)
+            return getEquivalentTileImprovement(tileImprovement.replaces!!)
+
+        for (improvement in cache.uniqueImprovements)
+            if (improvement.replaces == tileImprovement.name)
+                return improvement
+        return tileImprovement
+    }
+
     fun getEquivalentUnit(baseUnitName: String): BaseUnit {
         val baseUnit = gameInfo.ruleset.units[baseUnitName]
             ?: throw UncivShowableException("Unit $baseUnitName doesn't seem to exist!")
@@ -556,7 +614,7 @@ class Civilization : IsPartOfGameInfoSerialization {
     fun isDefeated() = when {
         isBarbarian() || isSpectator() -> false     // Barbarians and voyeurs can't lose
         hasEverOwnedOriginalCapital -> cities.isEmpty()
-        else -> units.getCivUnits().none()
+        else -> units.getCivUnitsSize() == 0
     }
 
     fun getEra(): Era = tech.era
@@ -658,6 +716,11 @@ class Civilization : IsPartOfGameInfoSerialization {
 
     //region state-changing functions
 
+    @VisibleForTesting
+    fun setNameForUnitTests(name: String) {
+        civName = name
+    }
+
     /** This is separate because the REGULAR setTransients updates the viewable ties,
      *  and updateVisibleTiles tries to meet civs...
      *  And if the civs don't yet know who they are then they don't know if they're barbarians =\
@@ -695,9 +758,6 @@ class Civilization : IsPartOfGameInfoSerialization {
                     city.workedTiles.remove(workedTile)
 
         passThroughImpassableUnlocked = passableImpassables.isNotEmpty()
-        // Cache whether this civ gets nonstandard terrain damage for performance reasons.
-        nonStandardTerrainDamage = getMatchingUniques(UniqueType.DamagesContainingUnits)
-            .any { gameInfo.ruleset.terrains[it.params[0]]!!.damagePerTurn != it.params[1].toInt() }
 
         hasLongCountDisplayUnique = hasUnique(UniqueType.MayanCalendarDisplay)
 
@@ -805,9 +865,10 @@ class Civilization : IsPartOfGameInfoSerialization {
     }
     // endregion
 
-    fun addCity(location: Vector2) {
-        val newCity = CityFounder().foundCity(this, location)
+    fun addCity(location: Vector2, unit: MapUnit? = null): City {
+        val newCity = CityFounder().foundCity(this, location, unit)
         newCity.cityConstructions.chooseNextConstruction()
+        return newCity
     }
 
     /** Destroy what's left of a Civilization
@@ -845,14 +906,31 @@ class Civilization : IsPartOfGameInfoSerialization {
      */
     fun moveCapitalTo(city: City?, oldCapital: City?) {
         // Add new capital first so the civ doesn't get stuck in a state where it has cities but no capital
-        if (city != null) {
+        val newCapitalIndicator = city?.capitalCityIndicator()
+        if (newCapitalIndicator != null) {
             // move new capital
-            city.cityConstructions.addBuilding(city.capitalCityIndicator())
+            city.cityConstructions.addBuilding(newCapitalIndicator)
             city.isBeingRazed = false // stop razing the new capital if it was being razed
+
+            // move the buildings with MovedToNewCapital unique
+            if (oldCapital != null) {
+                // Get the Set of the buildings to move
+                val buildingsToMove = oldCapital.cityConstructions.getBuiltBuildings().filter {
+                    it.hasUnique(UniqueType.MovesToNewCapital)
+                }.toSet()
+
+                oldCapital.cityConstructions.removeBuildings(buildingsToMove)
+
+                // Add the buildings to new capital
+                for (building in buildingsToMove) city.cityConstructions.addBuilding(building)
+            }
         }
-        oldCapital?.cityConstructions?.removeBuilding(oldCapital.capitalCityIndicator())
+
+        val oldCapitalIndicator = oldCapital?.capitalCityIndicator()
+        if (oldCapitalIndicator != null) oldCapital.cityConstructions.removeBuilding(oldCapitalIndicator)
     }
 
+    /** @param oldCapital `null` when destroying, otherwise old capital */
     fun moveCapitalToNextLargest(oldCapital: City?) {
         val availableCities = cities.filterNot { it.isCapital() }
         if (availableCities.none()) {
@@ -866,6 +944,13 @@ class Civilization : IsPartOfGameInfoSerialization {
             newCapital = availableCities.maxByOrNull { it.population.population }!!
             newCapital.annexCity()
         }
+
+        // Slight "Easter egg": see #11486: In the rare case a City-state loses their last city but it's not their original capital, the notification names the Nation which confuses players.
+        // Rename the newly conquered city when the conquering Nation's first-city name is equal to the nation name (meaning Babylon too) and the civ has lost that...
+        val currentCapital = getCapital()
+        if (currentCapital != null && currentCapital.isOriginalCapital && civName == currentCapital.name)
+            newCapital.name = "New [${civName}]\n(formerly known as [${newCapital.name}])"
+
         moveCapitalTo(newCapital, oldCapital)
     }
 

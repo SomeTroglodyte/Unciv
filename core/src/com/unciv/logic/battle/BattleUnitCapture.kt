@@ -1,5 +1,6 @@
 package com.unciv.logic.battle
 
+import com.badlogic.gdx.math.Vector2
 import com.unciv.Constants
 import com.unciv.logic.civilization.AlertType
 import com.unciv.logic.civilization.Civilization
@@ -22,6 +23,9 @@ object BattleUnitCapture {
         // There are 3 ways of capturing a unit, we separate them for cleaner code but we also need to ensure a unit isn't captured twice
 
         if (defender !is MapUnitCombatant || attacker !is MapUnitCombatant) return false
+        if (defender.hasUnique(UniqueType.Uncapturable, StateForConditionals(unit = defender.unit,
+                ourCombatant = defender, theirCombatant = attacker, attackedTile = attackedTile)))
+            return false
 
         if (!defender.isDefeated() || defender.unit.isCivilian()) return false
 
@@ -38,14 +42,14 @@ object BattleUnitCapture {
         // This is called after takeDamage and so the defeated defender is already destroyed and
         // thus removed from the tile - but MapUnit.destroy() will not clear the unit's currentTile.
         // Therefore placeUnitNearTile _will_ place the new unit exactly where the defender was
-        return spawnCapturedUnit(defender.getName(), attacker, defender.getTile())
+        return spawnCapturedUnit(defender, attacker)
     }
 
 
 
     private fun unitCapturedPrizeShipsUnique(attacker: MapUnitCombatant, defender: MapUnitCombatant): Boolean {
         if (attacker.unit.getMatchingUniques(UniqueType.KillUnitCapture)
-                .none { defender.matchesCategory(it.params[0]) }
+                .none { defender.matchesFilter(it.params[0]) }
         ) return false
 
         val captureChance = min(
@@ -89,15 +93,22 @@ object BattleUnitCapture {
 
     /** Places a [unitName] unit near [tile] after being attacked by [attacker].
      * Adds a notification to [attacker]'s civInfo and returns whether the captured unit could be placed */
-    private fun spawnCapturedUnit(unitName: String, attacker: ICombatant, tile: Tile): Boolean {
-        val addedUnit = attacker.getCivInfo().units.placeUnitNearTile(tile.position, unitName) ?: return false
+    private fun spawnCapturedUnit(defender: MapUnitCombatant, attacker: MapUnitCombatant): Boolean {
+        val defenderTile = defender.getTile()
+        val addedUnit = attacker.getCivInfo().units.placeUnitNearTile(defenderTile.position, defender.getName()) ?: return false
         addedUnit.currentMovement = 0f
         addedUnit.health = 50
-        attacker.getCivInfo().addNotification("An enemy [${unitName}] has joined us!", addedUnit.getTile().position, NotificationCategory.War, unitName)
+        attacker.getCivInfo().addNotification("An enemy [${defender.getName()}] has joined us!", addedUnit.getTile().position, NotificationCategory.War, defender.getName())
 
-        val civilianUnit = tile.civilianUnit
+        defender.getCivInfo().addNotification(
+            "An enemy [${attacker.getName()}] has captured our [${defender.getName()}]",
+            defender.getTile().position, NotificationCategory.War, attacker.getName(),
+            NotificationIcon.War, defender.getName()
+        )
+
+        val civilianUnit = defenderTile.civilianUnit
         // placeUnitNearTile might not have spawned the unit in exactly this tile, in which case no capture would have happened on this tile. So we need to do that here.
-        if (addedUnit.getTile() != tile && civilianUnit != null) {
+        if (addedUnit.getTile() != defenderTile && civilianUnit != null) {
             captureCivilianUnit(attacker, MapUnitCombatant(civilianUnit))
         }
         return true
@@ -112,7 +123,7 @@ object BattleUnitCapture {
             "Can't capture our own unit!"
         }
 
-        // need to save this because if the unit is captured its owner wil be overwritten
+        // need to save this because if the unit is captured its owner will be overwritten
         val defenderCiv = defender.getCivInfo()
 
         val capturedUnit = defender.unit
@@ -156,12 +167,14 @@ object BattleUnitCapture {
                 attacker.getCivInfo().popupAlerts.add(
                     PopupAlert(
                         AlertType.RecapturedCivilian,
-                        capturedUnitTile.position.toString()
+                        capturedUnit.currentTile.position.toString()
                     )
                 )
             }
 
-            else -> captureOrConvertToWorker(capturedUnit, attacker.getCivInfo())
+            else ->
+                if (captureOrConvertToWorker(capturedUnit, attacker.getCivInfo()) == null)
+                    wasDestroyedInstead = true
         }
 
         if (!wasDestroyedInstead)
@@ -184,22 +197,30 @@ object BattleUnitCapture {
         capturedUnit.updateVisibleTiles()
     }
 
-    fun captureOrConvertToWorker(capturedUnit: MapUnit, capturingCiv: Civilization) {
+    /**
+     *  Capture wrapper that also implements the rule that non-barbarians get a Worker as replacement for a captured Settler.
+     *  @return position the captured unit is in afterwards - can rarely be a different tile if the unit is no longer allowed where it originated.
+     *          Returns `null` if there is no Worker replacement for a Settler in the ruleset or placeUnitNearTile couldn't place it.
+     *  @see MapUnit.capturedBy
+     */
+    fun captureOrConvertToWorker(capturedUnit: MapUnit, capturingCiv: Civilization): Vector2? {
         // Captured settlers are converted to workers unless captured by barbarians (so they can be returned later).
-        if (capturedUnit.hasUnique(UniqueType.FoundCity) && !capturingCiv.isBarbarian()) {
-            capturedUnit.destroy()
-            // This is so that future checks which check if a unit has been captured are caught give the right answer
-            //  For example, in postBattleMoveToAttackedTile
-            capturedUnit.civ = capturingCiv
-
-            val workerTypeUnit = capturingCiv.gameInfo.ruleset.units.values
-                .firstOrNull { it.isCivilian() && it.getMatchingUniques(UniqueType.BuildImprovements)
-                    .any { unique -> unique.params[0] == "Land" } }
-
-            if (workerTypeUnit != null)
-                capturingCiv.units.placeUnitNearTile(capturedUnit.currentTile.position, workerTypeUnit)
+        if (!capturedUnit.hasUnique(UniqueType.FoundCity) || capturingCiv.isBarbarian()) {
+            capturedUnit.capturedBy(capturingCiv)
+            return capturedUnit.currentTile.position // if capturedBy has moved the unit, this is updated
         }
-        else capturedUnit.capturedBy(capturingCiv)
+
+        capturedUnit.destroy()
+        // This is so that future checks which check if a unit has been captured are caught give the right answer
+        //  For example, in postBattleMoveToAttackedTile
+        capturedUnit.civ = capturingCiv
+
+        val workerTypeUnit = capturingCiv.gameInfo.ruleset.units.values
+            .firstOrNull { it.isCivilian() && it.getMatchingUniques(UniqueType.BuildImprovements)
+                .any { unique -> unique.params[0] == "Land" } }
+            ?: return null
+        return capturingCiv.units.placeUnitNearTile(capturedUnit.currentTile.position, workerTypeUnit)
+            ?.currentTile?.position
     }
 
 }

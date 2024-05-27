@@ -21,6 +21,9 @@ class CivConstructions : IsPartOfGameInfoSerialization {
     /** Maps construction names to the amount of times bought */
     val boughtItemsWithIncreasingPrice: Counter<String> = Counter()
 
+    /** Maps construction names to the amount of times built */
+    val builtItemsWithIncreasingCost: Counter<String> = Counter()
+
     /** Maps cities by id to a set of all free buildings by name they contain.
      *  The building name is the Nation-specific equivalent if available.
      *  Sources: [UniqueType.FreeStatBuildings] **and** [UniqueType.FreeSpecificBuildings]
@@ -51,6 +54,7 @@ class CivConstructions : IsPartOfGameInfoSerialization {
         toReturn.freeStatBuildingsProvided.putAll(freeStatBuildingsProvided)
         toReturn.freeSpecificBuildingsProvided.putAll(freeSpecificBuildingsProvided)
         toReturn.boughtItemsWithIncreasingPrice.add(boughtItemsWithIncreasingPrice)  // add copies
+        toReturn.builtItemsWithIncreasingCost.add(builtItemsWithIncreasingCost)
         return toReturn
     }
 
@@ -149,7 +153,7 @@ class CivConstructions : IsPartOfGameInfoSerialization {
         // "Gain a free [buildingName] [cityFilter]"
         val freeBuildingsFromCiv = civInfo.getMatchingUniques(UniqueType.GainFreeBuildings, StateForConditionals.IgnoreConditionals)
         for (city in civInfo.cities) {
-            val freeBuildingsFromCity = city.getMatchingLocalOnlyUniques(UniqueType.GainFreeBuildings, StateForConditionals.IgnoreConditionals)
+            val freeBuildingsFromCity = city.getLocalMatchingUniques(UniqueType.GainFreeBuildings, StateForConditionals.IgnoreConditionals)
             val freeBuildingUniques = (freeBuildingsFromCiv + freeBuildingsFromCity)
                 .filter { city.matchesFilter(it.params[1]) && it.conditionalsApply(StateForConditionals(city.civ, city))
                     && !it.hasTriggerConditional() }

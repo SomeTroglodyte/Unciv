@@ -5,7 +5,7 @@ import com.unciv.Constants
 import com.unciv.GUI
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.civilization.Notification
-import com.unciv.ui.components.input.KeyCharAndCode
+import com.unciv.ui.components.extensions.getCloseButton
 import com.unciv.ui.components.widgets.TabbedPager
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
@@ -40,19 +40,17 @@ class EmpireOverviewScreen(
         super.dispose()
     }
 
+    override fun getCivilopediaRuleset() = viewingPlayer.gameInfo.ruleset
+
     init {
         val selectCategory = defaultCategory ?: EmpireOverviewCategories.values().firstOrNull { it.name == game.settings.lastOverviewPage }
         val iconSize = Constants.defaultFontSize.toFloat()
-
-        globalShortcuts.add(KeyCharAndCode.BACK) { game.popScreen() }
 
         tabbedPager = TabbedPager(
             stage.width, stage.width,
             centerAreaHeight, centerAreaHeight,
             separatorColor = Color.WHITE,
             capacity = EmpireOverviewCategories.values().size)
-
-        tabbedPager.addClosePage { game.popScreen() }
 
         for (category in EmpireOverviewCategories.values()) {
             val tabState = category.testState(viewingPlayer)
@@ -75,8 +73,14 @@ class EmpireOverviewScreen(
             }
         }
 
+        val closeButton = getCloseButton { game.popScreen() }
+        tabbedPager.decorateHeader(closeButton)
+
         tabbedPager.setFillParent(true)
         stage.addActor(tabbedPager)
+
+//         closeButton.setPosition(stage.width - 10f, stage.height - 10f, Align.topRight)
+//         stage.addActor(closeButton)
    }
 
     override fun recreate(): BaseScreen {
@@ -116,7 +120,7 @@ class EmpireOverviewScreen(
         // This is called by UncivGame.popScreen - e.g. after City Tab opened a City and the user closes that CityScreen...
         // Notify the current tab via its IPageExtensions.activated entry point so it can refresh if needed
         val index = tabbedPager.activePage
-        val category = EmpireOverviewCategories.values()[index - 1]
+        val category = EmpireOverviewCategories.values().getOrNull(index - 1) ?: return
         pageObjects[category]?.activated(index, "", tabbedPager) // Fake caption marks this as popScreen-triggered
     }
 }

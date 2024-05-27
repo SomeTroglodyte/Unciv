@@ -67,7 +67,7 @@ class ConstructionInfoTable(val cityScreen: CityScreen) : Table() {
                 if (link.isEmpty()) return@apply
                 touchable = Touchable.enabled
                 this.onClick {
-                    UncivGame.Current.pushScreen(CivilopediaScreen(city.getRuleset(), link = link))
+                    cityScreen.openCivilopedia(link)
                 }
             }).pad(5f)
 
@@ -130,11 +130,11 @@ class ConstructionInfoTable(val cityScreen: CityScreen) : Table() {
                 cityScreen.update()
             }
         ) {
-            sellBuildingConfirmed(construction, isFree)
+            sellBuildingConfirmed(construction)
         }.open()
     }
 
-    private fun sellBuildingConfirmed(construction: Building, isFree: Boolean) {
+    private fun sellBuildingConfirmed(construction: Building) {
         cityScreen.city.sellBuilding(construction)
         cityScreen.clearSelection()
         cityScreen.update()

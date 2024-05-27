@@ -27,7 +27,6 @@ import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.center
 import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toLabel
-import com.unciv.ui.components.input.KeyCharAndCode
 import com.unciv.ui.components.input.KeyShortcutDispatcherVeto
 import com.unciv.ui.components.input.KeyboardBinding
 import com.unciv.ui.components.input.keyShortcuts
@@ -137,7 +136,7 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         val column1 = Table().apply { defaults().pad(10f).fillX() }
         val column2 = if (singleColumn) column1 else Table().apply { defaults().pad(10f).fillX() }
 
-        if (game.files.autosaveExists()) {
+        if (game.files.autosaves.autosaveExists()) {
             val resumeTable = getMenuButton("Resume","OtherIcons/Resume", KeyboardBinding.Resume)
                 { resumeGame() }
             column1.add(resumeTable).row()
@@ -167,6 +166,12 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
             { game.pushScreen(ModManagementScreen()) }
         column2.add(modsTable).row()
 
+        if (game.files.getScenarioFiles().any()){
+            val scenarioTable = getMenuButton("Scenarios", "OtherIcons/Scenarios", KeyboardBinding.Scenarios)
+            { game.pushScreen(ScenarioScreen()) }
+            column2.add(scenarioTable).row()
+        }
+
         val optionsTable = getMenuButton("Options", "OtherIcons/Options", KeyboardBinding.MainMenuOptions)
             { openOptionsPopup() }
         optionsTable.onLongPress { openOptionsPopup(withDebug = true) }
@@ -183,7 +188,7 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         stage.addActor(scrollPane)
         table.center(scrollPane)
 
-        globalShortcuts.add(KeyCharAndCode.BACK) {
+        globalShortcuts.add(KeyboardBinding.QuitMainMenu) {
             if (hasOpenPopups()) {
                 closeAllPopups()
                 return@add
@@ -331,17 +336,21 @@ class MainMenuScreen: BaseScreen(), RecreateOnResize {
         }
     }
 
-    private fun openCivilopedia() {
-        stopBackgroundMapGeneration()
+    override fun getCivilopediaRuleset(): Ruleset {
+        if (easterEggRuleset != null) return easterEggRuleset!!
         val rulesetParameters = game.settings.lastGameSetup?.gameParameters
-        val ruleset = easterEggRuleset ?:
-            if (rulesetParameters == null)
-                RulesetCache[BaseRuleset.Civ_V_GnK.fullName] ?: return
-            else RulesetCache.getComplexRuleset(rulesetParameters)
+        if (rulesetParameters != null) return RulesetCache.getComplexRuleset(rulesetParameters)
+        return RulesetCache[BaseRuleset.Civ_V_GnK.fullName]
+            ?: throw IllegalStateException("No ruleset found")
+    }
+
+    override fun openCivilopedia(link: String) {
+        stopBackgroundMapGeneration()
+        val ruleset = getCivilopediaRuleset()
         UncivGame.Current.translations.translationActiveMods = ruleset.mods
         ImageGetter.setNewRuleset(ruleset)
         setSkin()
-        game.pushScreen(CivilopediaScreen(ruleset))
+        openCivilopedia(ruleset)
     }
 
     override fun recreate(): BaseScreen {

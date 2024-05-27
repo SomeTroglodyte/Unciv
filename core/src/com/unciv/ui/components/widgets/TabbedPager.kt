@@ -55,6 +55,15 @@ import com.unciv.ui.screens.basescreen.BaseScreen
  * maximum is not specified, that coordinate will grow with content up to screen size, and layout
  * max-W/H will always report the same as pref-W/H.
  */
+
+/*
+   Notes - this is implemented as 2x3 Table with 4 Cells.
+   First row is (scrolling header, fixed decoration) - second cell empty and size 0 until you use decorateHeader.
+   Second row / third Cell is "fixed" content, colspan 2. Used for pages that implement IPageExtensions.getFixedContent, otherwise size zero.
+   Third row / fourth Cell is scrolling content, colspan 2. Can scroll in both axes, while "fixed" only scrolls horizontally -
+   horizontal scroll is synchronized (for that to look good, both content parts must match in size and visual layout).
+*/
+
 //region Fields
 @Suppress("MemberVisibilityCanBePrivate", "unused")  // All members are part of our API
 open class TabbedPager(
@@ -86,6 +95,7 @@ open class TabbedPager(
     private val header = Table(BaseScreen.skin)
     val headerScroll = LinkedScrollPane(horizontalOnly = true, header)
     protected var headerHeight = 0f
+    private val headerDecorationRightCell: Cell<Actor?>
 
     private val fixedContentScroll = LinkedScrollPane(horizontalOnly = true)
     private val fixedContentScrollCell: Cell<ScrollPane>
@@ -289,12 +299,6 @@ open class TabbedPager(
         }
     }
 
-    private class EmptyClosePage(private val action: ()->Unit) : Actor(), IPageExtensions {
-        override fun activated(index: Int, caption: String, pager: TabbedPager) {
-            action()
-        }
-    }
-
     //endregion
     //region Initialization
 
@@ -309,13 +313,15 @@ open class TabbedPager(
         header.defaults().pad(headerPadding, headerPadding * 0.5f)
         // Measure header height, most likely its final value
         removePage(addPage("Dummy"))
-        add(headerScroll).growX().minHeight(headerHeight).row()
+        add(headerScroll).growX().minHeight(headerHeight)
+        headerDecorationRightCell = add().pad(0f)
+        row()
         if (separatorColor != Color.CLEAR)
             addSeparator(separatorColor)
 
         fixedContentScrollCell = add(fixedContentScroll)
-        fixedContentScrollCell.growX().row()
-        add(contentScroll).grow().row()
+        fixedContentScrollCell.colspan(2).growX().row()
+        add(contentScroll).colspan(2).grow().row()
     }
 
     //endregion
@@ -580,18 +586,6 @@ open class TabbedPager(
     }
 
     /**
-     * Add a "Close" button tho the Tab headers, with empty content which will invoke [action] when clicked
-     */
-    fun addClosePage(
-        insertBefore: Int = -1,
-        color: Color = Color(0.75f, 0.1f, 0.1f, 1f),
-        action: ()->Unit
-    ) {
-        val index = addPage(Constants.close, EmptyClosePage(action), insertBefore = insertBefore)
-        pages[index].button.color = color
-    }
-
-    /**
      * Activate any [secret][addPage] pages by asking for the password.
      *
      * If the parent of this Widget is a Popup, then this needs to be called _after_ the parent
@@ -620,6 +614,36 @@ open class TabbedPager(
         }, {
             deferredSecretPages.clear()
         }).open(true)
+    }
+
+    /** Gets total width of the header buttons including their padding.
+     *  Header will be scrollable if getHeaderPrefWidth > width. */
+    fun getHeaderPrefWidth() = header.prefWidth
+
+    /** Adds any Actor to the header, e.g. informative labels.
+     *  Must be called _after_ all pages are final, otherwise effects not guaranteed.
+     *
+     *  Notes:
+     *  *  [fixed] decorations have predefined cells, thus decorateHeader will replace any previous decoration. Non-[fixed] are cumulative and cannot be removed.
+     *  *  [leftSide] and [fixed] both true is not implemented.
+     *
+     *  @param leftSide If `true` then [actor] is inserted on the left, otherwise on the right of the page buttons.
+     *  @param fixed If `true` [actor] is outside the header ScrollPane and thus always shown.
+     */
+    fun decorateHeader(actor: Actor, leftSide: Boolean = false, fixed: Boolean = true) {
+        if (fixed) headerDecorationRightCell.pad(headerPadding).setActor(actor)
+        else insertHeaderCellAt(if (leftSide) 0 else -1).setActor(actor)
+        invalidate()
+        if (!leftSide || fixed) return
+        val addWidth = actor.width
+        for (page in pages) {
+            page.buttonX += addWidth
+        }
+    }
+
+    /** Alternative selection handler to [IPageExtensions.activated] */
+    fun onSelection(action: ((index: Int, caption: String, pager: TabbedPager) -> Unit)?) {
+        onSelectionCallback = action
     }
 
     //endregion
@@ -682,26 +706,6 @@ open class TabbedPager(
         }
     }
 
-    /** Gets total width of the header buttons including their padding.
-     *  Header will be scrollable if getHeaderPrefWidth > width. */
-    fun getHeaderPrefWidth() = header.prefWidth
+    //endregion
 
-    /** Adds any Actor to the header, e.g. informative labels.
-     *  Must be called _after_ all pages are final, otherwise effects not guaranteed.
-     *  @param leftSide If `true` then [actor] is inserted on the left, otherwise on the right of the page buttons.
-     */
-    fun decorateHeader(actor: Actor, leftSide: Boolean) {
-        val cell = insertHeaderCellAt(if (leftSide) 0 else -1)
-        cell.setActor(actor)
-        if (!leftSide) return
-        val addWidth = actor.width
-        for (page in pages) {
-            page.buttonX += addWidth
-        }
-    }
-
-    /** Alternative selection handler to [IPageExtensions.activated] */
-    fun onSelection(action: ((index: Int, caption: String, pager: TabbedPager) -> Unit)?) {
-        onSelectionCallback = action
-    }
 }

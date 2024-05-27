@@ -22,6 +22,8 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
 import com.unciv.ui.components.UnitMovementMemoryType
+import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.ui.screens.worldscreen.unit.actions.UnitActionsPillage
 import com.unciv.utils.debug
 import kotlin.math.max
 import kotlin.math.min
@@ -39,7 +41,7 @@ object Battle {
      * Currently not used by UI, only by automation via [BattleHelper.tryAttackNearbyEnemy][com.unciv.logic.automation.unit.BattleHelper.tryAttackNearbyEnemy]
      */
     fun moveAndAttack(attacker: ICombatant, attackableTile: AttackableTile) {
-        if (!movePreparingAttack(attacker, attackableTile)) return
+        if (!movePreparingAttack(attacker, attackableTile, true)) return
         attackOrNuke(attacker, attackableTile)
     }
 
@@ -48,8 +50,9 @@ object Battle {
      *
      * This is a logic function, not UI, so e.g. sound needs to be handled after calling this.
      */
-    fun movePreparingAttack(attacker: ICombatant, attackableTile: AttackableTile): Boolean {
+    fun movePreparingAttack(attacker: ICombatant, attackableTile: AttackableTile, tryHealPillage: Boolean = false): Boolean {
         if (attacker !is MapUnitCombatant) return true
+        val tilesMovedThrough = attacker.unit.movement.getDistanceToTiles().getPathToTile(attackableTile.tileToAttackFrom)
         attacker.unit.movement.moveToTile(attackableTile.tileToAttackFrom)
         /**
          * When calculating movement distance, we assume that a hidden tile is 1 movement point,
@@ -74,6 +77,19 @@ object Battle {
             attacker.unit.action = UnitActionType.SetUp.value
             attacker.unit.useMovementPoints(1f)
         }
+
+        if (tryHealPillage) {
+            // Now lets retroactively see if we can pillage any improvement on the path improvement to heal
+            // while still being able to attack
+            for (tileToPillage in tilesMovedThrough) {
+                if (attacker.unit.currentMovement <= 1f || attacker.unit.health > 90) break // We are done pillaging
+
+                if (UnitActionsPillage.canPillage(attacker.unit, tileToPillage)
+                    && tileToPillage.canPillageTileImprovement()) {
+                    UnitActionsPillage.getPillageAction(attacker.unit, tileToPillage)?.action?.invoke()
+                }
+            }
+        }
         return (attacker.unit.currentMovement > 0f)
     }
 
@@ -81,7 +97,7 @@ object Battle {
      * This is meant to be called only after all prerequisite checks have been done.
      */
     fun attackOrNuke(attacker: ICombatant, attackableTile: AttackableTile): DamageDealt {
-        return if (attacker is MapUnitCombatant && attacker.unit.baseUnit.isNuclearWeapon()) {
+        return if (attacker is MapUnitCombatant && attacker.unit.isNuclearWeapon()) {
             Nuke.NUKE(attacker, attackableTile.tileToAttack)
             DamageDealt.None
         } else {
@@ -150,13 +166,13 @@ object Battle {
         if (!defender.isDefeated() && defender is MapUnitCombatant && defender.unit.isExploring())
             defender.unit.action = null
 
-        fun triggerVictoryUniques(ourUnit:MapUnitCombatant, enemy:MapUnitCombatant) {
+        fun triggerVictoryUniques(ourUnit: MapUnitCombatant, enemy: MapUnitCombatant) {
             val stateForConditionals = StateForConditionals(civInfo = ourUnit.getCivInfo(),
-                ourCombatant = ourUnit, theirCombatant=enemy, tile = attackedTile)
+                ourCombatant = ourUnit, theirCombatant = enemy, tile = attackedTile)
             for (unique in ourUnit.unit.getTriggeredUniques(UniqueType.TriggerUponDefeatingUnit, stateForConditionals))
                 if (unique.conditionals.any { it.type == UniqueType.TriggerUponDefeatingUnit
                                 && enemy.unit.matchesFilter(it.params[0]) })
-                    UniqueTriggerActivation.triggerUnitwideUnique(unique, ourUnit.unit, triggerNotificationText = "due to our [${ourUnit.getName()}] defeating a [${enemy.getName()}]")
+                    UniqueTriggerActivation.triggerUnique(unique, ourUnit.unit, triggerNotificationText = "due to our [${ourUnit.getName()}] defeating a [${enemy.getName()}]")
         }
 
         // Add culture when defeating a barbarian when Honor policy is adopted, gold from enemy killed when honor is complete
@@ -205,7 +221,7 @@ object Battle {
         val stateForConditionals = StateForConditionals(civInfo = ourUnit.getCivInfo(),
             ourCombatant = ourUnit, theirCombatant=enemy, tile = attackedTile)
         for (unique in ourUnit.unit.getTriggeredUniques(UniqueType.TriggerUponDefeat, stateForConditionals))
-            UniqueTriggerActivation.triggerUnitwideUnique(unique, ourUnit.unit, triggerNotificationText = "due to our [${ourUnit.getName()}] being defeated by a [${enemy.getName()}]")
+            UniqueTriggerActivation.triggerUnique(unique, ourUnit.unit, triggerNotificationText = "due to our [${ourUnit.getName()}] being defeated by a [${enemy.getName()}]")
     }
 
     private fun tryEarnFromKilling(civUnit: ICombatant, defeatedUnit: MapUnitCombatant) {
@@ -215,7 +231,7 @@ object Battle {
         val bonusUniques = getKillUnitPlunderUniques(civUnit, defeatedUnit)
 
         for (unique in bonusUniques) {
-            if (!defeatedUnit.matchesCategory(unique.params[1])) continue
+            if (!defeatedUnit.matchesFilter(unique.params[1])) continue
 
             val yieldPercent = unique.params[0].toFloat() / 100
             val defeatedUnitYieldSourceType = unique.params[2]
@@ -229,7 +245,7 @@ object Battle {
 
         // CS friendship from killing barbarians
         if (defeatedUnit.getCivInfo().isBarbarian() && !defeatedUnit.isCivilian() && civUnit.getCivInfo().isMajorCiv()) {
-            for (cityState in UncivGame.Current.gameInfo!!.getAliveCityStates()) {
+            for (cityState in defeatedUnit.getCivInfo().gameInfo.getAliveCityStates()) {
                 if (civUnit.getCivInfo().knows(cityState) && defeatedUnit.unit.threatensCiv(cityState)) {
                     cityState.cityStateFunctions.threateningBarbarianKilledBy(civUnit.getCivInfo())
                 }
@@ -237,7 +253,7 @@ object Battle {
         }
 
         // CS war with major pseudo-quest
-        for (cityState in UncivGame.Current.gameInfo!!.getAliveCityStates()) {
+        for (cityState in defeatedUnit.getCivInfo().gameInfo.getAliveCityStates()) {
             cityState.questManager.militaryUnitKilledBy(civUnit.getCivInfo(), defeatedUnit.getCivInfo())
         }
     }
@@ -310,12 +326,12 @@ object Battle {
         if (attacker is MapUnitCombatant)
             for (unique in attacker.unit.getTriggeredUniques(UniqueType.TriggerUponLosingHealth))
                 if (unique.conditionals.any { it.params[0].toInt() <= defenderDamageDealt })
-                    UniqueTriggerActivation.triggerUnitwideUnique(unique, attacker.unit, triggerNotificationText = "due to losing [$defenderDamageDealt] HP")
+                    UniqueTriggerActivation.triggerUnique(unique, attacker.unit, triggerNotificationText = "due to losing [$defenderDamageDealt] HP")
 
         if (defender is MapUnitCombatant)
             for (unique in defender.unit.getTriggeredUniques(UniqueType.TriggerUponLosingHealth))
                 if (unique.conditionals.any { it.params[0].toInt() <= attackerDamageDealt })
-                    UniqueTriggerActivation.triggerUnitwideUnique(unique, defender.unit, triggerNotificationText = "due to losing [$attackerDamageDealt] HP")
+                    UniqueTriggerActivation.triggerUnique(unique, defender.unit, triggerNotificationText = "due to losing [$attackerDamageDealt] HP")
 
         plunderFromDamage(attacker, defender, attackerDamageDealt)
         return DamageDealt(attackerDamageDealt, defenderDamageDealt)
@@ -331,7 +347,7 @@ object Battle {
         val plunderedGoods = Stats()
 
         for (unique in plunderingUnit.unit.getMatchingUniques(UniqueType.DamageUnitsPlunder, checkCivInfoUniques = true)) {
-            if (plunderedUnit.matchesCategory(unique.params[1])) {
+            if (plunderedUnit.matchesFilter(unique.params[1])) {
                 val percentage = unique.params[0].toFloat()
                 plunderedGoods.add(Stat.valueOf(unique.params[2]), percentage / 100f * damageDealt)
             }
@@ -482,19 +498,29 @@ object Battle {
         promotions.XP += xpGained
 
         if (!otherIsBarbarian && civ.isMajorCiv()) { // Can't get great generals from Barbarians
-            val greatGeneralPointsBonus = thisCombatant
-                .getMatchingUniques(UniqueType.GreatPersonEarnedFaster, stateForConditionals, true)
-                .filter { unique ->
-                    val unitName = unique.params[0]
-                    // From the unique we know this unit exists
-                    val unit = civ.gameInfo.ruleset.units[unitName]!!
-                    unit.uniques.contains("Great Person - [War]")
-                }
-                .sumOf { it.params[1].toDouble() }
-            val greatGeneralPointsModifier = 1.0 + greatGeneralPointsBonus / 100
+            var greatGeneralUnits = civ.gameInfo.ruleset.greatGeneralUnits
+                    .filter { it.hasUnique(UniqueType.GreatPersonFromCombat, stateForConditionals) &&
+                        // Check if the unit is allowed for the Civ, ignoring build constrants
+                        it.getRejectionReasons(civ).none { reason ->
+                            !reason.isConstructionRejection() &&
+                            // Allow Generals even if not allowed via tech
+                            !reason.techPolicyEraWonderRequirements() }
+                    }.asSequence()
+            // For compatibility with older rulesets
+            if (civ.gameInfo.ruleset.greatGeneralUnits.isEmpty() &&
+                civ.gameInfo.ruleset.units["Great General"] != null)
+                greatGeneralUnits += civ.gameInfo.ruleset.units["Great General"]!!
 
-            val greatGeneralPointsGained = (xpGained * greatGeneralPointsModifier).toInt()
-            civ.greatPeople.greatGeneralPoints += greatGeneralPointsGained
+            for (unit in greatGeneralUnits) {
+                val greatGeneralPointsBonus = thisCombatant
+                    .getMatchingUniques(UniqueType.GreatPersonEarnedFaster, stateForConditionals, true)
+                    .filter { unit.matchesFilter(it.params[0]) }
+                    .sumOf { it.params[1].toDouble() }
+                val greatGeneralPointsModifier = 1.0 + greatGeneralPointsBonus / 100
+
+                val greatGeneralPointsGained = (xpGained * greatGeneralPointsModifier).toInt()
+                civ.greatPeople.greatGeneralPointsCounter[unit.name] += greatGeneralPointsGained
+            }
         }
 
         if (!thisCombatant.isDefeated() && !unitCouldAlreadyPromote && promotions.canBePromoted()) {
@@ -535,17 +561,17 @@ object Battle {
             city.puppetCity(attackerCiv)
             //Although in Civ5 Venice is unable to re-annex their capital, that seems a bit silly. No check for May not annex cities here.
             city.annexCity()
-        } else if (attackerCiv.isHuman()) {
+        } else if (attackerCiv.isHuman() && UncivGame.Current.worldScreen?.autoPlay?.isAutoPlayingAndFullAutoPlayAI() == false) {
             // we're not taking our former capital
             attackerCiv.popupAlerts.add(PopupAlert(AlertType.CityConquered, city.id))
-        } else  automateCityConquer(attackerCiv, city)
+        } else automateCityConquer(attackerCiv, city)
 
         if (attackerCiv.isCurrentPlayer())
             UncivGame.Current.settings.addCompletedTutorialTask("Conquer a city")
 
         for (unique in attackerCiv.getTriggeredUniques(UniqueType.TriggerUponConqueringCity, stateForConditionals)
                 + attacker.unit.getTriggeredUniques(UniqueType.TriggerUponConqueringCity, stateForConditionals))
-            UniqueTriggerActivation.triggerCivwideUnique(unique, attackerCiv, city)
+            UniqueTriggerActivation.triggerUnique(unique, attacker.unit)
     }
 
     /** Handle decision making after city conquest, namely whether the AI should liberate, puppet,

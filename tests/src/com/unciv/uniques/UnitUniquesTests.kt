@@ -2,6 +2,7 @@ package com.unciv.uniques
 
 import com.badlogic.gdx.math.Vector2
 import com.unciv.logic.map.mapunit.UnitTurnManager
+import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.fillPlaceholders
 import com.unciv.testing.GdxTestRunner
@@ -42,13 +43,14 @@ class UnitUniquesTests {
         val greatPerson = game.addUnit("Great Scientist", mainCiv, unitTile)
 
         // then
-        val giftAction = UnitActions.getGiftAction(greatPerson, unitTile)
+        val giftAction = UnitActions.getUnitActions(greatPerson, UnitActionType.GiftUnit)
+            .firstOrNull { it.action != null } // This tests that the action should be enabled, too
 
         Assert.assertNotNull("Great Person should have a gift action", giftAction)
     }
 
     @Test
-    fun CanConstructResourceRequiringImprovement() {
+    fun canConstructResourceRequiringImprovement() {
         // Do this early so the uniqueObjects lazy is still un-triggered
         val improvement = game.ruleset.tileImprovements["Manufactory"]!!
         val requireUnique = UniqueType.ConsumesResources.text.fillPlaceholders("3", "Iron")
@@ -66,14 +68,14 @@ class UnitUniquesTests {
         val unit = game.addUnit("Great Engineer", civ, unitTile)
         unit.currentMovement = unit.baseUnit.movement.toFloat()  // Required!
         val actionsWithoutIron = try {
-            UnitActionsFromUniques.getImprovementConstructionActions(unit, unitTile)
+            UnitActionsFromUniques.getImprovementConstructionActionsFromGeneralUnique(unit, unitTile)
         } catch (ex: Throwable) {
             // Give that IndexOutOfBoundsException a nicer name
             Assert.fail("getImprovementConstructionActions throws Exception ${ex.javaClass.simpleName}")
             return
         }.filter { it.action != null }
         Assert.assertTrue("Great Engineer should NOT be able to create a Manufactory modded to require Iron with 0 Iron",
-            actionsWithoutIron.isEmpty())
+            actionsWithoutIron.none())
 
         // Supply Iron
         val ironTile = game.getTile(Vector2(0f,1f))
@@ -88,10 +90,10 @@ class UnitUniquesTests {
         Assert.assertTrue("Test preparation failed to add Iron to Civ resources", ironAvailable >= 3)
 
         // See if that same Engineer could create a Manufactory NOW
-        val actionsWithIron = UnitActionsFromUniques.getImprovementConstructionActions(unit, unitTile)
+        val actionsWithIron = UnitActionsFromUniques.getImprovementConstructionActionsFromGeneralUnique(unit, unitTile)
             .filter { it.action != null }
         Assert.assertFalse("Great Engineer SHOULD be able to create a Manufactory modded to require Iron once Iron is available",
-            actionsWithIron.isEmpty())
+            actionsWithIron.none())
     }
 
     @Test

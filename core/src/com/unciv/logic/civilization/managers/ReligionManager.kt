@@ -1,14 +1,15 @@
 package com.unciv.logic.civilization.managers
 
-import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.mapunit.MapUnit
+import com.unciv.logic.map.tile.Tile
 import com.unciv.models.Counter
 import com.unciv.models.Religion
 import com.unciv.models.ruleset.Belief
 import com.unciv.models.ruleset.BeliefType
+import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
@@ -135,10 +136,6 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         civInfo.gameInfo.religions[beliefName] = religion!!
         for (city in civInfo.cities)
             city.religion.addPressure(beliefName, 200 * city.population.population)
-        religionState = ReligionState.Pantheon
-
-        for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponFoundingPantheon))
-            UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo)
     }
 
     fun greatProphetsEarned(): Int = civInfo.civConstructions.boughtItemsWithIncreasingPrice[getGreatProphetEquivalent()?.name ?: ""]
@@ -271,25 +268,22 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         return true
     }
 
-    fun mayFoundReligionNow(prophet: MapUnit): Boolean {
+    fun mayFoundReligionHere(tile: Tile): Boolean {
         if (!mayFoundReligionAtAll()) return false
-        if (!prophet.getTile().isCityCenter()) return false
-        if (prophet.getTile().getCity()!!.isHolyCity()) return false
+        if (!tile.isCityCenter()) return false
+        if (tile.getCity()!!.isHolyCity()) return false
         // No double holy cities. Not sure if these were allowed in the base game
         return true
     }
 
     fun foundReligion(prophet: MapUnit) {
-        if (!mayFoundReligionNow(prophet)) return // How did you do this?
+        if (!mayFoundReligionHere(prophet.getTile())) return // How did you do this?
         if (religionState == ReligionState.None) shouldChoosePantheonBelief = true
         religionState = ReligionState.FoundingReligion
         civInfo.religionManager.foundingCityId = prophet.getTile().getCity()!!.id
-
-        for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponFoundingReligion))
-            UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo)
     }
 
-    fun mayEnhanceReligionAtAll(prophet: MapUnit): Boolean {
+    fun mayEnhanceReligionAtAll(): Boolean {
         if (!civInfo.gameInfo.isReligionEnabled()) return false
         if (religion == null) return false // First found a pantheon
         if (religionState != ReligionState.Religion) return false // First found an actual religion
@@ -304,18 +298,15 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         return true
     }
 
-    fun mayEnhanceReligionNow(prophet: MapUnit): Boolean {
-        if (!mayEnhanceReligionAtAll(prophet)) return false
-        if (!prophet.getTile().isCityCenter()) return false
+    fun mayEnhanceReligionHere(tile: Tile): Boolean {
+        if (!mayEnhanceReligionAtAll()) return false
+        if (!tile.isCityCenter()) return false
         return true
     }
 
     fun useProphetForEnhancingReligion(prophet: MapUnit) {
-        if (!mayEnhanceReligionNow(prophet)) return // How did you do this?
+        if (!mayEnhanceReligionHere(prophet.getTile())) return // How did you do this?
         religionState = ReligionState.EnhancingReligion
-
-        for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponEnhancingReligion))
-            UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo)
     }
 
     /**
@@ -381,15 +372,8 @@ class ReligionManager : IsPartOfGameInfoSerialization {
         // Must be done first in case when gain more later
         freeBeliefs.clear()
 
-        when (religionState) {
-            ReligionState.EnhancingReligion -> {
-                religionState = ReligionState.EnhancedReligion
-            }
-            ReligionState.None -> {
-                foundPantheon(beliefs[0].name, useFreeBeliefs)
-            }
-            else -> {}
-        }
+        if (religionState == ReligionState.None)
+            foundPantheon(beliefs[0].name, useFreeBeliefs)  // makes religion non-null
         // add beliefs (religion exists at this point)
         religion!!.followerBeliefs.addAll(
             beliefs
@@ -402,15 +386,34 @@ class ReligionManager : IsPartOfGameInfoSerialization {
                 .map { it.name }
         )
 
+        when (religionState) {
+            ReligionState.None -> {
+                religionState = ReligionState.Pantheon
+                for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponFoundingPantheon))
+                    UniqueTriggerActivation.triggerUnique(unique, civInfo)
+            }
+            ReligionState.FoundingReligion -> {
+                religionState = ReligionState.Religion
+                for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponFoundingReligion))
+                    UniqueTriggerActivation.triggerUnique(unique, civInfo)
+            }
+            ReligionState.EnhancingReligion -> {
+                religionState = ReligionState.EnhancedReligion
+                for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponEnhancingReligion))
+                    UniqueTriggerActivation.triggerUnique(unique, civInfo)
+            }
+            else -> {}
+        }
+
         for (unique in civInfo.getTriggeredUniques(UniqueType.TriggerUponAdoptingPolicyOrBelief))
             for (belief in beliefs)
                 if (unique.conditionals.any {it.type == UniqueType.TriggerUponAdoptingPolicyOrBelief && it.params[0] == belief.name})
-                    UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo,
+                    UniqueTriggerActivation.triggerUnique(unique, civInfo,
                         triggerNotificationText = "due to adopting [${belief.name}]")
 
         for (belief in beliefs)
-            for (unique in belief.uniqueObjects.filter { !it.hasTriggerConditional() })
-                UniqueTriggerActivation.triggerCivwideUnique(unique, civInfo)
+            for (unique in belief.uniqueObjects.filter { !it.hasTriggerConditional() && it.conditionalsApply(StateForConditionals(civInfo)) })
+                UniqueTriggerActivation.triggerUnique(unique, civInfo)
 
         civInfo.updateStatsForNextTurn()  // a belief can have an immediate effect on stats
     }
@@ -426,8 +429,6 @@ class ReligionManager : IsPartOfGameInfoSerialization {
 
         religion = newReligion
         civInfo.gameInfo.religions[name] = newReligion
-
-        religionState = ReligionState.Religion
 
         val holyCity = civInfo.cities.first { it.id == foundingCityId }
         holyCity.religion.religionThisIsTheHolyCityOf = newReligion.name
@@ -447,8 +448,7 @@ class ReligionManager : IsPartOfGameInfoSerialization {
 
         val religion = missionary.civ.gameInfo.religions[missionary.religion] ?: return false
         if (religion.isPantheon()) return false
-        if (!missionary.canDoLimitedAction(Constants.spreadReligion)
-            && UnitActionModifiers.getUsableUnitActionUniques(missionary, UniqueType.CanSpreadReligion).none()) return false
+        if (UnitActionModifiers.getUsableUnitActionUniques(missionary, UniqueType.CanSpreadReligion).none()) return false
         return true
     }
 
@@ -477,6 +477,26 @@ class ReligionManager : IsPartOfGameInfoSerialization {
     fun getHolyCity(): City? {
         if (religion == null) return null
         return civInfo.gameInfo.getCities().firstOrNull { it.isHolyCityOf(religion!!.name) }
+    }
+
+    fun getMajorityReligion(): Religion? {
+        // let's count for each religion (among those actually presents in civ's cities)
+        val religionCounter = Counter<Religion>()
+        for (city in civInfo.cities) {
+            // if city's majority Religion is null, let's just continue to next loop iteration
+            val cityMajorityReligion = city.religion.getMajorityReligion() ?: continue
+            // if not yet continued to next iteration from previous line, let's add the Religion to religionCounter
+            religionCounter.add(cityMajorityReligion, 1)
+        }
+        // let's get the max-counted Religion if there is one, null otherwise; if null, return null
+        val maxReligionCounterEntry = religionCounter.maxByOrNull { it.value } ?: return null
+        // if not returned null from prev. line, check if the maxReligion is in most of the cities
+        return if (maxReligionCounterEntry.value > civInfo.cities.size / 2)
+        // if maxReligionCounterEntry > half-cities-count we return the Religion of maxReligionCounterEntry
+            maxReligionCounterEntry.key
+        else
+        // if maxReligionCounterEntry <= half-cities-count we just return null
+            null
     }
 }
 

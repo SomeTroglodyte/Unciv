@@ -7,6 +7,7 @@ import com.unciv.UncivGame.Version
 import com.unciv.json.json
 import com.unciv.logic.BackwardCompatibility.convertFortify
 import com.unciv.logic.BackwardCompatibility.guaranteeUnitPromotions
+import com.unciv.logic.BackwardCompatibility.migrateGreatGeneralPools
 import com.unciv.logic.BackwardCompatibility.migrateToTileHistory
 import com.unciv.logic.BackwardCompatibility.removeMissingModReferences
 import com.unciv.logic.GameInfo.Companion.CURRENT_COMPATIBILITY_NUMBER
@@ -23,12 +24,12 @@ import com.unciv.logic.civilization.PlayerType
 import com.unciv.logic.civilization.managers.TechManager
 import com.unciv.logic.civilization.managers.TurnManager
 import com.unciv.logic.civilization.managers.VictoryManager
+import com.unciv.logic.github.Github.repoNameToFolderName
 import com.unciv.logic.map.CityDistanceData
 import com.unciv.logic.map.TileMap
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.Religion
 import com.unciv.models.metadata.GameParameters
-import com.unciv.models.ruleset.ModOptionsConstants
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.Speed
@@ -38,7 +39,6 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.tr
 import com.unciv.ui.audio.MusicMood
 import com.unciv.ui.audio.MusicTrackChooserFlags
-import com.unciv.ui.screens.pickerscreens.Github.repoNameToFolderName
 import com.unciv.ui.screens.savescreens.Gzip
 import com.unciv.ui.screens.worldscreen.status.NextTurnProgress
 import com.unciv.utils.DebugUtils
@@ -87,6 +87,7 @@ data class VictoryData(val winningCiv: String, val victoryType: String, val vict
     constructor(): this("","",0)
 }
 
+/** The virtual world the users play in */
 class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion {
     companion object {
         /** The current compatibility version of [GameInfo]. This number is incremented whenever changes are made to the save file structure that guarantee that
@@ -115,7 +116,7 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
     var gameId = UUID.randomUUID().toString() // random string
     var checksum = ""
 
-    var victoryData:VictoryData? = null
+    var victoryData: VictoryData? = null
 
     /** Maps a civ to the civ they voted for - `null` on the value side means they abstained */
     var diplomaticVictoryVotesCast = HashMap<String, String?>()
@@ -286,7 +287,7 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
 
     fun isReligionEnabled(): Boolean {
         val religionDisabledByRuleset = (ruleset.eras[gameParameters.startingEra]!!.hasUnique(UniqueType.DisablesReligion)
-                || ruleset.modOptions.uniques.contains(ModOptionsConstants.disableReligion))
+                || ruleset.modOptions.hasUnique(UniqueType.DisableReligion))
         return !religionDisabledByRuleset
     }
 
@@ -316,7 +317,7 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         return year.toInt()
     }
 
-    fun calculateChecksum():String {
+    fun calculateChecksum(): String {
         val oldChecksum = checksum
         checksum = "" // Checksum calculation cannot include old checksum, obvs
         val bytes = MessageDigest
@@ -362,11 +363,25 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
 
         val isOnline = gameParameters.isOnlineMultiplayer
 
+        // Skip the player if we are playing hotseat
+        // If all hotseat players are defeated then skip all but the first one
+        fun shouldAutoProcessHotseatPlayer(): Boolean =
+            !isOnline &&
+            player.isDefeated() && (civilizations.any { it.isHuman() && it.isAlive() }
+                || civilizations.first { it.isHuman() } != player)
+
+        // Skip all spectators and defeated players
+        // If all players are defeated then let the first player control next turn
+        fun shouldAutoProcessOnlinePlayer(): Boolean =
+            isOnline && (player.isSpectator() || player.isDefeated() &&
+                (civilizations.any { it.isHuman() && it.isAlive() }
+                    || civilizations.first { it.isHuman() } != player))
+
         // We process player automatically if:
         while (isSimulation() ||                    // simulation is active
                 player.isAI() ||                    // or player is AI
-                isOnline && (player.isDefeated() || // or player is online defeated
-                        player.isSpectator()))      // or player is online spectator
+            shouldAutoProcessHotseatPlayer() ||     // or a player is defeated in hotseat
+            shouldAutoProcessOnlinePlayer())        // or player is online spectator
         {
 
             // Starting preparations
@@ -375,11 +390,17 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
             // Automation done here
             TurnManager(player).automateTurn()
 
+            val worldScreen = UncivGame.Current.worldScreen
             // Do we need to break if player won?
             if (simulateUntilWin && player.victoryManager.hasWon()) {
                 simulateUntilWin = false
+                worldScreen?.autoPlay?.stopAutoPlay()
                 break
             }
+
+            // Do we need to stop AutoPlay?
+            if (worldScreen != null && worldScreen.autoPlay.isAutoPlaying() && player.victoryManager.hasWon() && !oneMoreTurnMode)
+                worldScreen.autoPlay.stopAutoPlay()
 
             // Clean up
             TurnManager(player).endTurn(progressBar)
@@ -391,12 +412,12 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         if (turns == DebugUtils.SIMULATE_UNTIL_TURN)
             DebugUtils.SIMULATE_UNTIL_TURN = 0
 
-        // We found human player, so we are making him current
+        // We found a human player, so we are making them current
         currentTurnStartTime = System.currentTimeMillis()
         currentPlayer = player.civName
         currentPlayerCiv = getCivilization(currentPlayer)
 
-        // Starting his turn
+        // Starting their turn
         TurnManager(player).startTurn(progressBar)
 
         // No popups for spectators
@@ -518,13 +539,20 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
      * @see notifyExploredResources
      */
     fun getExploredResourcesNotification(
-        civInfo: Civilization,
+        civ: Civilization,
         resourceName: String,
         maxDistance: Int = Int.MAX_VALUE,
         filter: (Tile) -> Boolean = { true }
     ): Notification? {
         data class CityTileAndDistance(val city: City, val tile: Tile, val distance: Int)
 
+        // Include your city-state allies' cities with your own for the purpose of showing the closest city
+        val relevantCities: Sequence<City> = civ.cities.asSequence() +
+            civ.getKnownCivs()
+                .filter { it.isCityState() && it.getAllyCiv() == civ.civName }
+                .flatMap { it.cities }
+
+        // All sources of the resource on the map, using a city-state's capital center tile for the CityStateOnlyResource types
         val exploredRevealTiles: Sequence<Tile> =
                 if (ruleset.tileResources[resourceName]!!.hasUnique(UniqueType.CityStateOnlyResource)) {
                     // Look for matching mercantile CS centers
@@ -538,15 +566,15 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
                         .filter { it.resource == resourceName }
                 }
 
+        // Apply all filters to the above collection and sort them by distance to closest city
         val exploredRevealInfo = exploredRevealTiles
-            .filter { civInfo.hasExplored(it) }
+            .filter { civ.hasExplored(it) }
             .flatMap { tile ->
-                civInfo.cities.asSequence()
-                    .map {
+                relevantCities
+                    .map { city ->
                         // build a full cross join all revealed tiles * civ's cities (should rarely surpass a few hundred)
                         // cache distance for each pair as sort will call it ~ 2n log n times
                         // should still be cheaper than looking up 'the' closest city per reveal tile before sorting
-                            city ->
                         CityTileAndDistance(city, tile, tile.aerialDistanceTo(city.getCenterTile()))
                     }
             }
@@ -602,6 +630,9 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         for (baseUnit in ruleset.units.values)
             baseUnit.ruleset = ruleset
 
+        for (building in ruleset.buildings.values)
+            building.ruleset = ruleset
+
         // This needs to go before tileMap.setTransients, as units need to access
         // the nation of their civilization when setting transients
         for (civInfo in civilizations) civInfo.gameInfo = this
@@ -629,11 +660,10 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
 
 
         for (civInfo in civilizations) civInfo.setTransients()
-        for (civInfo in civilizations) {
-            civInfo.thingsToFocusOnForVictory =
-                    civInfo.getPreferredVictoryTypeObject()?.getThingsToFocus(civInfo) ?: setOf()
-        }
         tileMap.setNeutralTransients() // has to happen after civInfo.setTransients() sets owningCity
+
+        for (civInfo in civilizations) // Due to religion victory, has to happen after civInfo.religionManager is set for all civs
+            civInfo.thingsToFocusOnForVictory = civInfo.getPreferredVictoryTypeObjects().flatMap { it.getThingsToFocus(civInfo) }.toSet()
 
         convertFortify()
 
@@ -651,6 +681,8 @@ class GameInfo : IsPartOfGameInfoSerialization, HasGameInfoSerializationVersion 
         guaranteeUnitPromotions()
 
         migrateToTileHistory()
+
+        migrateGreatGeneralPools()
     }
 
     private fun updateCivilizationState() {

@@ -4,13 +4,13 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.unciv.GUI
 import com.unciv.logic.civilization.PlayerType
 import com.unciv.models.metadata.GameSettings
-import com.unciv.ui.components.widgets.UncivSlider
 import com.unciv.ui.components.extensions.toLabel
+import com.unciv.ui.components.widgets.UncivSlider
 import com.unciv.ui.screens.basescreen.BaseScreen
 
 fun gameplayTab(
     optionsPopup: OptionsPopup
-) = Table(BaseScreen.skin).apply {
+): Table = Table(BaseScreen.skin).apply {
     pad(10f)
     defaults().pad(5f)
 
@@ -51,6 +51,11 @@ fun gameplayTab(
         "Automated units choose promotions",
         settings.automatedUnitsChoosePromotions, false
     ) { settings.automatedUnitsChoosePromotions = it }
+    optionsPopup.addCheckbox(
+        this,
+        "Cities auto-bombard at end of turn",
+        settings.citiesAutoBombardAtEndOfTurn, false
+    ) { settings.citiesAutoBombardAtEndOfTurn = it }
     optionsPopup.addCheckbox(this, "Order trade offers by amount", settings.orderTradeOffersByAmount) { settings.orderTradeOffersByAmount = it }
     optionsPopup.addCheckbox(this, "Ask for confirmation when pressing next turn", settings.confirmNextTurn) { settings.confirmNextTurn = it }
 

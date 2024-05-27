@@ -35,6 +35,7 @@ import com.unciv.ui.components.extensions.withoutItem
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.screens.civilopediascreen.CivilopediaCategories
 import com.unciv.ui.screens.civilopediascreen.FormattedLine
+import com.unciv.ui.screens.worldscreen.WorldScreen
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -140,13 +141,13 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     }
 
     /** @param constructionName needs to be a non-perpetual construction, else an empty string is returned */
-    internal fun getTurnsToConstructionString(constructionName: String, useStoredProduction:Boolean = true) =
+    internal fun getTurnsToConstructionString(constructionName: String, useStoredProduction: Boolean = true) =
         getTurnsToConstructionString(getConstruction(constructionName), useStoredProduction)
 
     /** @param construction needs to be a non-perpetual construction, else an empty string is returned */
-    internal fun getTurnsToConstructionString(construction: IConstruction, useStoredProduction:Boolean = true): String {
+    internal fun getTurnsToConstructionString(construction: IConstruction, useStoredProduction: Boolean = true): String {
         if (construction !is INonPerpetualConstruction) return ""   // shouldn't happen
-        val cost = construction.getProductionCost(city.civ)
+        val cost = construction.getProductionCost(city.civ, city)
         val turnsToConstruction = turnsToConstruction(construction.name, useStoredProduction)
         val currentProgress = if (useStoredProduction) getWorkDone(construction.name) else 0
         val lines = ArrayList<String>()
@@ -254,8 +255,8 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         val constr = getConstruction(constructionName)
         return when {
             constr is PerpetualConstruction -> 0
-            useStoredProduction -> (constr as INonPerpetualConstruction).getProductionCost(city.civ) - getWorkDone(constructionName)
-            else -> (constr as INonPerpetualConstruction).getProductionCost(city.civ)
+            useStoredProduction -> (constr as INonPerpetualConstruction).getProductionCost(city.civ, city) - getWorkDone(constructionName)
+            else -> (constr as INonPerpetualConstruction).getProductionCost(city.civ, city)
         }
     }
 
@@ -267,6 +268,10 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         if (workLeft <= productionOverflow) // if we already have stored up enough production to finish it directly
             return 1 // we'll finish this next turn
 
+        return ceil((workLeft-productionOverflow) / productionForConstruction(constructionName).toDouble()).toInt()
+    }
+
+    fun productionForConstruction(constructionName: String): Int {
         val cityStatsForConstruction: Stats
         if (currentConstructionFromQueue == constructionName) cityStatsForConstruction = city.cityStats.currentCityStats
         else {
@@ -288,9 +293,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             cityStatsForConstruction = cityStats.currentCityStats
         }
 
-        val production = cityStatsForConstruction.production.roundToInt()
-
-        return ceil((workLeft-productionOverflow) / production.toDouble()).toInt()
+        return cityStatsForConstruction.production.roundToInt()
     }
 
     fun cheapestStatBuilding(stat: Stat): Building? {
@@ -331,7 +334,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         val construction = getConstruction(currentConstructionFromQueue)
         if (construction is PerpetualConstruction) chooseNextConstruction() // check every turn if we could be doing something better, because this doesn't end by itself
         else {
-            val productionCost = (construction as INonPerpetualConstruction).getProductionCost(city.civ)
+            val productionCost = (construction as INonPerpetualConstruction).getProductionCost(city.civ, city)
             if (inProgressConstructions.containsKey(currentConstructionFromQueue)
                     && inProgressConstructions[currentConstructionFromQueue]!! >= productionCost) {
                 val potentialOverflow = inProgressConstructions[currentConstructionFromQueue]!! - productionCost
@@ -345,6 +348,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
                     city.civ.addNotification("No space available to place [${construction.name}] near [${city.name}]",
                         city.location, NotificationCategory.Production, construction.name)
                 }
+                city.civ.civConstructions.builtItemsWithIncreasingCost[construction.name] += 1
             }
         }
     }
@@ -386,7 +390,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         chooseNextConstruction()
     }
 
-    private fun validateInProgressConstructions() {
+    fun validateInProgressConstructions() {
         // remove obsolete stuff from in progress constructions - happens often and leaves clutter in memory and save files
         // should have little visible consequences - any accumulated points that may be reused later should stay (nukes when manhattan project city lost, nat wonder when conquered an empty city...), all other points should be refunded
         // Should at least be called before each turn - if another civ completes a wonder after our previous turn, we should get the refund this turn
@@ -413,9 +417,12 @@ class CityConstructions : IsPartOfGameInfoSerialization {
                     }
                 } else if (construction is BaseUnit) {
                     // Production put into upgradable units gets put into upgraded version
-                    if (rejectionReasons.all { it.type == RejectionReasonType.Obsoleted } && construction.upgradesTo != null) {
-                        val upgradedUnitName = city.civ.getEquivalentUnit(construction.upgradesTo!!).name
-                        inProgressConstructions[upgradedUnitName] = (inProgressConstructions[upgradedUnitName] ?: 0) + workDone
+                    val cheapestUpgradeUnit = construction.getRulesetUpgradeUnits(StateForConditionals(city.civ, city))
+                        .map { city.civ.getEquivalentUnit(it) }
+                        .filter { it.isBuildable(this) }
+                        .minByOrNull { it.cost }
+                    if (rejectionReasons.all { it.type == RejectionReasonType.Obsoleted } && cheapestUpgradeUnit != null) {
+                        inProgressConstructions[cheapestUpgradeUnit.name] = (inProgressConstructions[cheapestUpgradeUnit.name] ?: 0) + workDone
                     }
                 }
                 inProgressConstructions.remove(constructionName)
@@ -506,7 +513,9 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         addBuilding(building)
     }
 
-    fun addBuilding(building: Building) {
+    fun addBuilding(building: Building,
+                    /** False when creating initial buildings in city - so we don't "waste" a free building on a building we're going to get anyway, from settler buildings */
+                    tryAddFreeBuildings: Boolean = true) {
         val buildingName = building.name
         val civ = city.civ
 
@@ -529,7 +538,8 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             civ.cache.updateHasActiveEnemyMovementPenalty()
 
         // Korean unique - apparently gives the same as the research agreement
-        if (building.isStatRelated(Stat.Science) && civ.hasUnique(UniqueType.TechBoostWhenScientificBuildingsBuiltInCapital))
+        if (building.isStatRelated(Stat.Science) && civ.hasUnique(UniqueType.TechBoostWhenScientificBuildingsBuiltInCapital)
+            && city.isCapital())
             civ.tech.addScience(civ.tech.scienceOfLast8Turns.sum() / 8)
 
         // Happiness is global, so it could affect all cities
@@ -540,25 +550,27 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         }
         else city.reassignPopulationDeferred()
 
-        city.civ.civConstructions.tryAddFreeBuildings()
+        if (tryAddFreeBuildings)
+            city.civ.civConstructions.tryAddFreeBuildings()
     }
 
     fun triggerNewBuildingUniques(building: Building) {
+        val stateForConditionals = StateForConditionals(city.civ, city)
         val triggerNotificationText ="due to constructing [${building.name}]"
 
         for (unique in building.uniqueObjects)
-            if (!unique.hasTriggerConditional())
-                UniqueTriggerActivation.triggerCivwideUnique(unique, city.civ, city, triggerNotificationText = triggerNotificationText)
+            if (!unique.hasTriggerConditional() && unique.conditionalsApply(stateForConditionals))
+                UniqueTriggerActivation.triggerUnique(unique, city, triggerNotificationText = triggerNotificationText)
 
-        for (unique in city.civ.getTriggeredUniques(UniqueType.TriggerUponConstructingBuilding, StateForConditionals(city.civ, city)))
+        for (unique in city.civ.getTriggeredUniques(UniqueType.TriggerUponConstructingBuilding, stateForConditionals))
             if (unique.conditionals.any {it.type == UniqueType.TriggerUponConstructingBuilding && building.matchesFilter(it.params[0])})
-                UniqueTriggerActivation.triggerCivwideUnique(unique, city.civ, city, triggerNotificationText = triggerNotificationText)
+                UniqueTriggerActivation.triggerUnique(unique, city, triggerNotificationText = triggerNotificationText)
 
-        for (unique in city.civ.getTriggeredUniques(UniqueType.TriggerUponConstructingBuildingCityFilter, StateForConditionals(city.civ, city)))
+        for (unique in city.civ.getTriggeredUniques(UniqueType.TriggerUponConstructingBuildingCityFilter, stateForConditionals))
             if (unique.conditionals.any {it.type == UniqueType.TriggerUponConstructingBuildingCityFilter
                     && building.matchesFilter(it.params[0])
                     && city.matchesFilter(it.params[1])})
-                UniqueTriggerActivation.triggerCivwideUnique(unique, city.civ, city, triggerNotificationText = triggerNotificationText)
+                UniqueTriggerActivation.triggerUnique(unique, city, triggerNotificationText = triggerNotificationText)
     }
 
     fun removeBuilding(buildingName: String) {
@@ -578,13 +590,13 @@ class CityConstructions : IsPartOfGameInfoSerialization {
 
     fun removeBuildings(buildings: Set<Building>) {
         val buildingsToRemove = buildings.map { it.name }.toSet()
-        builtBuildings.removeIf {
+        builtBuildings.removeAll {
             it in buildingsToRemove
         }
         setTransients()
     }
 
-    fun updateUniques(onLoadGame:Boolean = false) {
+    fun updateUniques(onLoadGame: Boolean = false) {
         builtBuildingUniqueMap.clear()
         for (building in getBuiltBuildings())
             builtBuildingUniqueMap.addUniques(building.uniqueObjects)
@@ -644,7 +656,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         tile: Tile? = null
     ): Boolean {
         // Support UniqueType.CreatesOneImprovement: it is active when getImprovementToCreate returns an improvement
-        val improvementToPlace = (construction as? Building)?.getImprovementToCreate(city.getRuleset())
+        val improvementToPlace = (construction as? Building)?.getImprovementToCreate(city.getRuleset(), city.civ)
         if (improvementToPlace != null) {
             // If active without a predetermined tile to place the improvement on, automate a tile
             val finalTile = tile
@@ -697,14 +709,15 @@ class CityConstructions : IsPartOfGameInfoSerialization {
 
         val isCurrentPlayersTurn = city.civ.gameInfo.isUsersTurn()
                 || !city.civ.gameInfo.gameParameters.isOnlineMultiplayer
-        if ((UncivGame.Current.settings.autoAssignCityProduction && isCurrentPlayersTurn) // only automate if the active human player has the setting to automate production
-                || !city.civ.isHuman() || city.isPuppet) {
+        if ((isCurrentPlayersTurn && (UncivGame.Current.settings.autoAssignCityProduction
+                || UncivGame.Current.worldScreen?.autoPlay?.isAutoPlayingAndFullAutoPlayAI() == true)) // only automate if the active human player has the setting to automate production
+                || city.civ.isAI() || city.isPuppet) {
             ConstructionAutomation(this).chooseNextConstruction()
         }
 
         /** Support for [UniqueType.CreatesOneImprovement] - if an Improvement-creating Building was auto-queued, auto-choose a tile: */
         val building = getCurrentConstruction() as? Building ?: return
-        val improvement = building.getImprovementToCreate(city.getRuleset()) ?: return
+        val improvement = building.getImprovementToCreate(city.getRuleset(), city.civ) ?: return
         if (getTileForImprovement(improvement.name) != null) return
         val newTile = Automation.getTileForConstructionImprovement(city, improvement) ?: return
         newTile.improvementFunctions.markForCreatesOneImprovement(improvement.name)
@@ -766,7 +779,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         // UniqueType.CreatesOneImprovement support
         val construction = getConstruction(constructionName)
         if (construction is Building) {
-            val improvement = construction.getImprovementToCreate(city.getRuleset())
+            val improvement = construction.getImprovementToCreate(city.getRuleset(), city.civ)
             if (improvement != null) {
                 getTileForImprovement(improvement.name)?.stopWorkingOnImprovement()
             }
@@ -834,7 +847,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
      *  (skip if none found), then un-mark the tile and place the improvement unless [removeOnly] is set.
      */
     private fun applyCreateOneImprovement(building: Building, removeOnly: Boolean = false) {
-        val improvement = building.getImprovementToCreate(city.getRuleset())
+        val improvement = building.getImprovementToCreate(city.getRuleset(), city.civ)
             ?: return
         val tileForImprovement = getTileForImprovement(improvement.name) ?: return
         tileForImprovement.stopWorkingOnImprovement()  // clears mark
@@ -854,7 +867,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         val ruleset = city.getRuleset()
         val indexToRemove = constructionQueue.withIndex().firstNotNullOfOrNull {
             val construction = getConstruction(it.value)
-            val buildingImprovement = (construction as? Building)?.getImprovementToCreate(ruleset)?.name
+            val buildingImprovement = (construction as? Building)?.getImprovementToCreate(ruleset, city.civ)?.name
             it.index.takeIf { buildingImprovement == improvement }
         } ?: return
 

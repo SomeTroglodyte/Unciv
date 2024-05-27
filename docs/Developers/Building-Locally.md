@@ -21,8 +21,7 @@ By the end of this guide, you will have Unciv running locally from code, so you 
           (Optionally, you can save some space by selecting 'Show Package Details' and choosing the Platform SDK only, without Sources or system Images)
         - Click "SDK Tools"
         - Select "Show Package Details" in the bottom right
-        - Choose version 33.0.2 under "Android SDK Build-Tools"
-        ![image](/Unciv/assets/Android_SDK_Tools.png)
+        - Choose version 34.0.0 under "Android SDK Build-Tools"
         - Click "Apply"
         - Restart Android Studio
 -   In Android Studio, Run > Edit configurations (be sure the Gradle sync is finished successfully first).
@@ -82,6 +81,11 @@ If during initial launch you get an error that the JDK version is wrong, install
 After building, the output .JAR file should be in `/desktop/build/libs/Unciv.jar`
 
 For actual development, you'll probably need to download Android Studio and build it yourself - see above :)
+
+## Debugging on Android
+
+Sometimes, checking things out on the desktop version is not enough and you need to debug Unciv running on an Android device.
+For an introduction, see [Testing android builds](Testing-Android-Builds.md).
 
 ## Next steps
 

@@ -19,7 +19,6 @@ import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.translations.tr
-import com.unciv.ui.components.widgets.ExpanderTab
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.addSeparatorVertical
 import com.unciv.ui.components.extensions.disable
@@ -31,6 +30,7 @@ import com.unciv.ui.components.input.KeyCharAndCode
 import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.components.input.onClick
+import com.unciv.ui.components.widgets.ExpanderTab
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.ConfirmPopup
 import com.unciv.ui.popups.Popup
@@ -52,16 +52,16 @@ class NewGameScreen(
     isReset: Boolean = false
 ): IPreviousScreen, PickerScreen(), RecreateOnResize {
 
-    override var gameSetupInfo = defaultGameSetupInfo ?: GameSetupInfo.fromSettings()
+    override val gameSetupInfo = defaultGameSetupInfo ?: GameSetupInfo.fromSettings()
     override val ruleset = Ruleset()  // updateRuleset will clear and add
     private val newGameOptionsTable: GameOptionsTable
-    private val playerPickerTable: PlayerPickerTable
+    internal val playerPickerTable: PlayerPickerTable
     private val mapOptionsTable: MapOptionsTable
 
     init {
         val isPortrait = isNarrowerThan4to3()
 
-        tryUpdateRuleset()  // must come before playerPickerTable so mod nations from fromSettings
+        tryUpdateRuleset(updateUI = false)  // must come before playerPickerTable so mod nations from fromSettings
 
         // remove the victory types which are not in the rule set (e.g. were in the recently disabled mod)
         gameSetupInfo.gameParameters.victoryTypes.removeAll { it !in ruleset.victories.keys }
@@ -148,9 +148,8 @@ class NewGameScreen(
 
         if (gameSetupInfo.gameParameters.players.none {
                     it.playerType == PlayerType.Human &&
-                            // do not allow multiplayer with only remote spectator(s) and AI(s) - non-MP that works
-                            !(it.chosenCiv == Constants.spectator && gameSetupInfo.gameParameters.isOnlineMultiplayer &&
-                                    it.playerId != UncivGame.Current.settings.multiplayer.userId)
+                            // do not allow multiplayer with only spectator(s) and AI(s) - non-MP that works
+                            !(it.chosenCiv == Constants.spectator && gameSetupInfo.gameParameters.isOnlineMultiplayer)
                 }) {
             val noHumanPlayersPopup = Popup(this)
             noHumanPlayersPopup.addGoodSizedLabel("No human players selected!".tr()).row()
@@ -309,6 +308,9 @@ class NewGameScreen(
                     reuseWith("It looks like we can't make a map with the parameters you requested!")
                     row()
                     addGoodSizedLabel("Maybe you put too many players into too small a map?").row()
+                    addButton("Copy to clipboard"){
+                        Gdx.app.clipboard.contents = exception.stackTraceToString()
+                    }
                     addCloseButton()
                 }
                 Gdx.input.inputProcessor = stage
@@ -322,7 +324,7 @@ class NewGameScreen(
             newGame.isUpToDate = true // So we don't try to download it from dropbox the second after we upload it - the file is not yet ready for loading!
             try {
                 game.onlineMultiplayer.createGame(newGame)
-                game.files.requestAutoSave(newGame)
+                game.files.autosaves.requestAutoSave(newGame)
             } catch (ex: FileStorageRateLimitReached) {
                 launchOnGLThread {
                     popup.reuseWith("Server limit reached! Please wait for [${ex.limitRemainingSeconds}] seconds", true)
@@ -362,12 +364,13 @@ class NewGameScreen(
      *
      *  @return Success - failure means gameSetupInfo was reset to defaults and the Ruleset was reverted to G&K
      */
-    fun tryUpdateRuleset(): Boolean {
+    fun tryUpdateRuleset(updateUI: Boolean): Boolean {
         var success = true
         fun handleFailure(message: String): Ruleset {
             success = false
-            gameSetupInfo = GameSetupInfo()
             ToastPopup(message, this, 5000)
+            gameSetupInfo.gameParameters.mods.clear()
+            gameSetupInfo.gameParameters.baseRuleset = BaseRuleset.Civ_V_GnK.fullName
             return RulesetCache[BaseRuleset.Civ_V_GnK.fullName]!!
         }
 
@@ -385,6 +388,8 @@ class NewGameScreen(
         ruleset.add(newRuleset)
         ImageGetter.setNewRuleset(ruleset)
         game.musicController.setModList(gameSetupInfo.gameParameters.getModsAndBaseRuleset())
+
+        if (updateUI) newGameOptionsTable.updateRuleset(ruleset)
         return success
     }
 
@@ -401,7 +406,7 @@ class NewGameScreen(
     fun updateTables() {
         playerPickerTable.gameParameters = gameSetupInfo.gameParameters
         playerPickerTable.update()
-        newGameOptionsTable.gameParameters = gameSetupInfo.gameParameters
+        newGameOptionsTable.changeGameParameters(gameSetupInfo.gameParameters)
         newGameOptionsTable.update()
     }
 

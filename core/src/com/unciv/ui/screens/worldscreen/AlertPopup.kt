@@ -18,20 +18,26 @@ import com.unciv.logic.civilization.PopupAlert
 import com.unciv.logic.civilization.diplomacy.DiplomacyFlags
 import com.unciv.logic.civilization.diplomacy.DiplomaticModifiers
 import com.unciv.logic.civilization.diplomacy.RelationshipLevel
+import com.unciv.models.ruleset.EventChoice
+import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.fillPlaceholders
 import com.unciv.models.translations.tr
 import com.unciv.ui.audio.MusicMood
 import com.unciv.ui.audio.MusicTrackChooserFlags
+import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.disable
 import com.unciv.ui.components.extensions.pad
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.extensions.toTextButton
+import com.unciv.ui.components.input.KeyCharAndCode
 import com.unciv.ui.components.input.KeyboardBinding
 import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.Popup
+import com.unciv.ui.screens.civilopediascreen.FormattedLine
+import com.unciv.ui.screens.civilopediascreen.MarkupRenderer
 import com.unciv.ui.screens.diplomacyscreen.LeaderIntroTable
 import com.unciv.ui.screens.victoryscreen.VictoryScreen
 import java.util.EnumSet
@@ -39,6 +45,10 @@ import java.util.EnumSet
 /**
  * [Popup] communicating events other than trade offers to the player.
  * (e.g. First Contact, Wonder built, Tech researched,...)
+ *
+ * **Opens itself at the end of instantiation!**
+ *
+ * (In rare cases, it chooses not to: Mods making a RecapturedCivilian not find the unit as it was illegal and removed after the actual capture)
  *
  * Called in [WorldScreen].update, which pulls them from viewingCiv.popupAlerts.
  *
@@ -73,6 +83,8 @@ class AlertPopup(
         addCloseButton(text, KeyboardBinding.NextTurnAlternate, null)
 
     init {
+        var skipThisAlert = false
+
         // This makes the buttons fill up available width. See comments in #9559.
         // To implement a middle ground, I would either simply replace growX() with minWidth(240f) or so,
         // or replace the Popup.equalizeLastTwoButtonWidths() function with something intelligent not
@@ -95,9 +107,11 @@ class AlertPopup(
             AlertType.StartIntro -> addStartIntro()
             AlertType.DiplomaticMarriage -> addDiplomaticMarriage()
             AlertType.BulliedProtectedMinor, AlertType.AttackedProtectedMinor -> addBulliedOrAttackedProtectedMinor()
-            AlertType.RecapturedCivilian -> addRecapturedCivilian()
+            AlertType.RecapturedCivilian -> skipThisAlert = addRecapturedCivilian()
             AlertType.GameHasBeenWon -> addGameHasBeenWon()
+            AlertType.Event -> skipThisAlert = !addEvent()
         }
+        if (!skipThisAlert) open()
     }
 
     //region AlertType handlers
@@ -279,14 +293,12 @@ class AlertPopup(
         music.chooseTrack(viewingCiv.civName, MusicMood.Golden, MusicTrackChooserFlags.setSpecific)
     }
 
-    private fun addRecapturedCivilian() {
+    /** @return true to skip opening this Popup, as we're running in the initialization phase before the Popup is open */
+    private fun addRecapturedCivilian(): Boolean {
         val position = Vector2().fromString(popupAlert.value)
         val tile = gameInfo.tileMap[position]
-        val capturedUnit = tile.civilianUnit // This has got to be it
-        if (capturedUnit == null) { // the unit disappeared somehow? maybe a modded action?
-            close()
-            return
-        }
+        val capturedUnit = tile.civilianUnit  // This has got to be it
+            ?: return true // the unit disappeared somehow? maybe a modded action?
         val originalOwner = getCiv(capturedUnit.originalOwner!!)
         val captor = viewingCiv
 
@@ -327,6 +339,7 @@ class AlertPopup(
             // Take it for ourselves
             BattleUnitCapture.captureOrConvertToWorker(capturedUnit, captor)
         }
+        return false
     }
 
     private fun addStartIntro() {
@@ -491,6 +504,24 @@ class AlertPopup(
         }
     }
 
+    /** Returns if event was triggered correctly */
+    private fun addEvent(): Boolean {
+        val event = gameInfo.ruleset.events[popupAlert.value] ?: return false
+
+        val stateForConditionals = StateForConditionals(gameInfo.currentPlayerCiv)
+        val choices = event.getMatchingChoices(stateForConditionals)
+            ?: return false
+
+        if (event.text.isNotEmpty())
+            addGoodSizedLabel(event.text)
+        if (event.civilopediaText.isNotEmpty()) {
+            add(event.renderCivilopediaText(stageWidth * 0.5f, ::openCivilopedia)).row()
+        }
+
+        for (choice in choices) addChoice(choice)
+        return true
+    }
+
     //endregion
 
     override fun close() {
@@ -498,4 +529,30 @@ class AlertPopup(
         worldScreen.shouldUpdate = true
         super.close()
     }
+
+    private fun addChoice(choice: EventChoice) {
+        addSeparator()
+
+        val button = choice.text.toTextButton()
+        button.onActivation {
+            close()
+            choice.triggerChoice(gameInfo.currentPlayerCiv)
+        }
+        val key = KeyCharAndCode.parse(choice.keyShortcut)
+        if (key != KeyCharAndCode.UNKNOWN) {
+            button.keyShortcuts.add(key)
+            button.addTooltip(key)
+        }
+        add(button).row()
+
+        val lines = (
+                choice.civilopediaText.asSequence()
+                + choice.triggeredUniqueObjects.asSequence()
+                    .filterNot { it.isHiddenToUsers() }
+                    .map { FormattedLine(it) }
+            ).asIterable()
+        add(MarkupRenderer.render(lines, stageWidth * 0.5f, linkAction = ::openCivilopedia)).row()
+    }
+
+    private fun openCivilopedia(link: String) = worldScreen.openCivilopedia(link)
 }

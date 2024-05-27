@@ -23,7 +23,7 @@ open class Stats(
 
     // This is what facilitates indexed access by [Stat] or add(Stat,Float)
     // without additional memory allocation or expensive conditionals
-    private fun statToProperty(stat: Stat):KMutableProperty0<Float>{
+    private fun statToProperty(stat: Stat): KMutableProperty0<Float> {
         return when(stat) {
             Stat.Production -> ::production
             Stat.Food -> ::food
@@ -185,6 +185,13 @@ open class Stats(
         }
     }
 
+    /** Return a string of just +/- value and Stat symbol*/
+    fun toStringOnlyIcons(addPlusSign: Boolean = true): String {
+        return this.joinToString {
+            (if (addPlusSign && it.value > 0) "+" else "") + it.value.toInt() + " " + it.key.character
+        }
+    }
+
     /** Represents one [key][Stat]/[value][Float] pair returned by the [iterator] */
     data class StatValuePair (val key: Stat, val value: Float)
 
@@ -262,7 +269,7 @@ open class Stats(
     }
 }
 
-class StatMap:LinkedHashMap<String,Stats>() {
+class StatMap : LinkedHashMap<String,Stats>() {
     fun add(source: String, stats: Stats) {
         // We always clone to avoid touching the mutable stats of uniques
         if (!containsKey(source)) put(source, stats.clone())
