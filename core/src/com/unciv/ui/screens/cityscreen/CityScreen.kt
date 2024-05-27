@@ -2,7 +2,9 @@ package com.unciv.ui.screens.cityscreen
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
+import com.unciv.GUI
 import com.unciv.logic.city.City
+import com.unciv.logic.civilization.Civilization
 import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UncivSound
 import com.unciv.models.ruleset.Building
@@ -18,8 +20,20 @@ abstract class CityScreen : BaseScreen() {
 
     // Fields needed in common
     abstract val city: City
-    abstract val canChangeState: Boolean
     abstract val selectedConstruction: IConstruction?
+
+    private val selectedCiv: Civilization = GUI.getWorldScreen().selectedCiv
+    private val isSpying = selectedCiv.gameInfo.isEspionageEnabled() && selectedCiv != city.civ
+    /** Toggles or adds/removes all state changing buttons */
+    internal val canChangeState = GUI.isAllowedChangeState() && !isSpying
+
+    /**
+     * This is the regular civ city list if we are not spying, if we are spying then it is every foreign city that our spies are in
+     */
+    internal val viewableCities get() =
+        if (isSpying) selectedCiv.espionageManager.getCitiesWithOurSpies()
+            .filter { it.civ !=  GUI.getWorldScreen().selectedCiv }
+        else city.civ.cities
 
     // Methods
     abstract fun update()

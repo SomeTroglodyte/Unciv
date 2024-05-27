@@ -35,7 +35,7 @@ internal class CityScreenMiniStats(
             val icon = Table()
             val image = ImageGetter.getStatIcon(stat.name)
             val focus = CityFocus.safeValueOf(stat)
-            val toggledFocus = if (focus == city.cityAIFocus) {
+            val toggledFocus = if (focus.name == city.cityAIFocus) {
                 icon.add(image.surroundWithCircle(iconSize, false, color = selectedColor))
                 CityFocus.NoFocus
             } else {
@@ -44,7 +44,7 @@ internal class CityScreenMiniStats(
             }
             if (cityScreen.canCityBeChanged()) {
                 icon.onActivation(binding = toggledFocus.binding) {
-                    city.cityAIFocus = toggledFocus
+                    city.setCityFocus(toggledFocus)
                     city.reassignPopulation()
                     onUpdate()
                 }

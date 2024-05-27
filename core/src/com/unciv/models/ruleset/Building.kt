@@ -553,7 +553,7 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
     fun hasCreateOneImprovementUnique() = _hasCreatesOneImprovementUnique
 
     private var _getImprovementToCreate: TileImprovement? = null
-    private fun getImprovementToCreate(ruleset: Ruleset): TileImprovement? {
+    fun getImprovementToCreate(ruleset: Ruleset): TileImprovement? {
         if (!hasCreateOneImprovementUnique()) return null
         if (_getImprovementToCreate == null) {
             val improvementUnique = getMatchingUniques(UniqueType.CreatesOneImprovement)

@@ -139,7 +139,7 @@ internal class CityScreenHeader(private val cityScreen: TabbedCityScreen) : Scal
     }
 
     private fun addNavigation(delta: Int, binding: KeyboardBinding) {
-        if (city.civ.cities.size <= 1) return
+        if (cityScreen.viewableCities.size <= 1) return
 
         val arrowName = if (delta > 0) "OtherIcons/ForwardArrow" else "OtherIcons/BackArrow"
         val overColor = if (getRelativeLuminance(innerColor) < 0.5f) Color.BLACK else Color.WHITE
@@ -172,7 +172,7 @@ internal class CityScreenHeader(private val cityScreen: TabbedCityScreen) : Scal
         }
 
     fun page(delta: Int) {
-        val cities = city.civ.cities
+        val cities = cityScreen.viewableCities
         val numCities = cities.size
         if (numCities == 0) return
         val indexOfCity = cities.indexOf(city)

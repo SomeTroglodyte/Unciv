@@ -36,10 +36,6 @@ internal class TabbedCityScreen(
     selectConstruction: IConstruction? = null,
     selectTile: Tile? = null
 ): CityScreen() {
-
-    /** Toggles or adds/removes all state changing buttons */
-    override val canChangeState = GUI.isAllowedChangeState()
-
     private val cityAmbiencePlayer = CityAmbiencePlayer(city)
 
     private val wrapper: Table
@@ -158,12 +154,12 @@ internal class TabbedCityScreen(
             infoPage.update(pager.height - pager.headerScroll.height)
         //todo
     }
-    internal fun updateMap() {
+    private fun updateMap() {
         if (activePageID == CityScreenPages.Map)
             mapPage.update()
     }
 
-    internal fun updateConstruction() {
+    private fun updateConstruction() {
         if (activePageID == CityScreenPages.Construction)
             constructionPage.update()
     }

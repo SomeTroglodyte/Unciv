@@ -53,9 +53,6 @@ class ClassicCityScreen(
         const val wltkIconSize = CityScreen.wltkIconSize
     }
 
-    /** Toggles or adds/removes all state changing buttons */
-    override val canChangeState = GUI.isAllowedChangeState()
-
     // Clockwise from the top-left
 
     /** Displays current production, production queue and available productions list
