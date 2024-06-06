@@ -2,6 +2,7 @@ package com.unciv.ui.screens.overviewscreen
 
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.utils.Align
 import com.unciv.GUI
@@ -13,6 +14,7 @@ import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.UncivTooltip.Companion.addTooltip
 import com.unciv.ui.components.extensions.darken
+import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toPrettyString
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.components.input.onClick
@@ -147,5 +149,18 @@ open class UnitOverviewTabHelpers {
                 else Color.GOLDENROD.darken(0.25f)
             }
         ).size(24f).padLeft(8f)
+    }
+
+    fun getMenuButton(item: MapUnit, actionContext: UnitOverviewTab): Actor {
+        val menuIcon = ImageGetter.getImage("OtherIcons/MenuIcon")
+            .surroundWithCircle(30f, true, Color.DARK_GRAY)
+        val selectKey = getUnitIdentifier(item)
+        menuIcon.onClick {
+            UnitOverviewContextMenu(actionContext, menuIcon, item) {
+                actionContext.update()
+                actionContext.overviewScreen.select(EmpireOverviewCategories.Units, selectKey)
+            }
+        }
+        return menuIcon
     }
 }

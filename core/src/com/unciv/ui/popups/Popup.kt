@@ -31,10 +31,6 @@ import com.unciv.ui.components.input.KeyboardBinding
 import com.unciv.ui.components.input.KeyboardBindings
 import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
-import com.unciv.ui.popups.Popup.Scrollability
-import com.unciv.ui.popups.Popup.Scrollability.All
-import com.unciv.ui.popups.Popup.Scrollability.None
-import com.unciv.ui.popups.Popup.Scrollability.WithoutButtons
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.basescreen.UncivStage
 
@@ -255,7 +251,7 @@ open class Popup(
        but metioning that distinction seems overkill. innerTable has the clearer Kdoc for "where the Actors go".
     */
     /** Popup proxy redirects [add][com.badlogic.gdx.scenes.scene2d.ui.Table.add] to [topTable] */
-    final override fun <T : Actor?> add(actor: T): Cell<T> = topTable.add(actor)
+    override fun <T : Actor?> add(actor: T): Cell<T> = topTable.add(actor)
     /** Popup proxy redirects [add][com.badlogic.gdx.scenes.scene2d.ui.Table.add] to [topTable] */
     final override fun add(): Cell<Actor?> = topTable.add()
     /** Popup proxy redirects [row][com.badlogic.gdx.scenes.scene2d.ui.Table.row] to [topTable] */

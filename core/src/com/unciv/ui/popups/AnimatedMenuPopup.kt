@@ -7,6 +7,7 @@ import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.Touchable
 import com.badlogic.gdx.scenes.scene2d.actions.Actions
+import com.badlogic.gdx.scenes.scene2d.ui.Cell
 import com.badlogic.gdx.scenes.scene2d.ui.Container
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable
@@ -71,11 +72,17 @@ open class AnimatedMenuPopup(
      *
      *  Return `null` to abort the menu creation - nothing will be shown and the instance should be discarded.
      *  Useful if you need full context first to determine if any entry makes sense.
+     *
+     *  Beware this sets all cells to growX() by default - you'll probably need to tweak if you do several columns
      */
     open fun createContentTable(): Table? = Table().apply {
         defaults().pad(5f, 15f, 5f, 15f).growX()
         background = BaseScreen.skinStrings.getUiBackground("General/AnimatedMenu", BaseScreen.skinStrings.roundedEdgeRectangleShape, Color.DARK_GRAY)
     }
+
+    @Deprecated("Do not add to the AnimatedMenuPopup directly, content goes into the createContentTable result!",
+        ReplaceWith("table.add(actor)"))
+    override fun <T : Actor?> add(actor: T): Cell<T> = super.add(actor)
 
     init {
         clickBehindToClose = true

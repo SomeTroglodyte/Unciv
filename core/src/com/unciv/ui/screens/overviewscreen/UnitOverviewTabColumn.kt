@@ -8,15 +8,12 @@ import com.unciv.models.translations.tr
 import com.unciv.ui.components.ISortableGridContentProvider
 import com.unciv.ui.components.ISortableGridContentProvider.Companion.toCenteredLabel
 import com.unciv.ui.components.extensions.brighten
-import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.SortableGrid
 import com.unciv.ui.components.widgets.UnitGroup
 import com.unciv.ui.images.IconTextButton
-import com.unciv.ui.images.ImageGetter
-import com.unciv.ui.screens.pickerscreens.UnitRenamePopup
 
 //todo Extending getEntryValue here to have a second String-based "channel" - could go into SortableGrid, possibly by defining a DataType per column???
 
@@ -45,21 +42,10 @@ enum class UnitOverviewTabColumn(
         override fun getTotalsActor(items: Iterable<MapUnit>) = items.count().toCenteredLabel()
     },
 
-    EditName("") {
+    Menu("") {
         override val defaultSort get() = SortableGrid.SortDirection.None
-        override fun getEntryActor(item: MapUnit, iconSize: Float, actionContext: UnitOverviewTab): Actor {
-            val selectKey = getUnitIdentifier(item)
-            val editIcon = ImageGetter.getImage("OtherIcons/Pencil")
-                .apply { this.color = Color.WHITE }
-                .surroundWithCircle(30f, true, Color(0x000c31))
-            editIcon.onClick {
-                UnitRenamePopup(actionContext.overviewScreen, item) {
-                    actionContext.update()
-                    actionContext.overviewScreen.select(EmpireOverviewCategories.Units, selectKey)
-                }
-            }
-            return editIcon
-        }
+        override fun getEntryActor(item: MapUnit, iconSize: Float, actionContext: UnitOverviewTab) =
+            getMenuButton(item, actionContext)
     },
 
     Action {
