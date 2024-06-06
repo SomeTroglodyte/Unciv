@@ -23,9 +23,9 @@ import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.UnitGroup
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
-import com.unciv.ui.screens.pickerscreens.CityRenamePopup
+import com.unciv.ui.popups.CityRenamePopup
 import com.unciv.ui.screens.pickerscreens.PromotionPickerScreen
-import com.unciv.ui.screens.pickerscreens.UnitRenamePopup
+import com.unciv.ui.popups.UnitRenamePopup
 import com.unciv.ui.screens.worldscreen.WorldScreen
 
 class UnitTable(val worldScreen: WorldScreen) : Table() {

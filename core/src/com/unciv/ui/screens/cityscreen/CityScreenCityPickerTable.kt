@@ -9,7 +9,7 @@ import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
-import com.unciv.ui.screens.pickerscreens.CityRenamePopup
+import com.unciv.ui.popups.CityRenamePopup
 
 /** Widget for the City Screen -
  *  the panel at bottom center showing the city name and offering arrows to cycle through the cities. */

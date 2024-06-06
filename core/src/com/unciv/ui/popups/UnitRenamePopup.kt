@@ -1,10 +1,9 @@
-package com.unciv.ui.screens.pickerscreens
+package com.unciv.ui.popups
 
 import com.unciv.logic.map.mapunit.MapUnit
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.images.ImageGetter
-import com.unciv.ui.popups.AskTextPopup
 import com.unciv.ui.screens.basescreen.BaseScreen
 
 class UnitRenamePopup(screen: BaseScreen, unit: MapUnit, actionOnClose: ()->Unit) : AskTextPopup(
