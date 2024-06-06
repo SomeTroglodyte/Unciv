@@ -10,8 +10,7 @@ import com.unciv.models.UnitAction
 import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.tr
-import com.unciv.ui.popups.ConfirmPopup
-import com.unciv.ui.popups.hasOpenPopups
+import com.unciv.ui.popups.UnitDisbandPopup
 import com.unciv.ui.screens.pickerscreens.PromotionPickerScreen
 import com.unciv.ui.screens.worldscreen.unit.actions.UnitActions.getActionDefaultPage
 import com.unciv.ui.screens.worldscreen.unit.actions.UnitActions.getPagingActions
@@ -229,19 +228,10 @@ object UnitActions {
         yield(UnitAction(type = UnitActionType.DisbandUnit,
             useFrequency = 0f, // Only can happen once per unit
             action = {
-                val worldScreen = GUI.getWorldScreen()
-                if (!worldScreen.hasOpenPopups()) {
-                    val disbandText = if (unit.currentTile.getOwner() == unit.civ)
-                        "Disband this unit for [${unit.baseUnit.getDisbandGold(unit.civ)}] gold?".tr()
-                    else "Do you really want to disband this unit?".tr()
-                    ConfirmPopup(worldScreen, disbandText, "Disband unit") {
-                        unit.disband()
-                        unit.civ.updateStatsForNextTurn() // less upkeep!
-                        GUI.setUpdateWorldOnNextRender()
-                        if (GUI.getSettings().autoUnitCycle)
-                            worldScreen.switchToNextUnit()
-                    }.open()
-                }
+                UnitDisbandPopup(unit) { worldScreen ->
+                    if (GUI.getSettings().autoUnitCycle)
+                        worldScreen.switchToNextUnit()
+                }.open()
             }.takeIf { unit.currentMovement > 0 }
         ))
     }
