@@ -21,7 +21,7 @@ import com.unciv.ui.components.extensions.toLabel
  * @param actionOnOk Lambda that will be executed after pressing 'OK'.
  * Gets the text the user inputted as a parameter.
  */
-class AskTextPopup(
+open class AskTextPopup(
     screen: BaseScreen,
     label: String = "Please enter some text",
     icon: Group = ImageGetter.getImage("OtherIcons/Pencil").apply { this.color = Color.BLACK }.surroundWithCircle(80f),
