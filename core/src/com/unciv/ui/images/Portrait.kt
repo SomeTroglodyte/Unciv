@@ -170,6 +170,11 @@ class PortraitBuilding(name: String, size: Float) : Portrait(Type.Building, name
     override fun getDefaultImageTint(): Color {
         return Color.BLACK
     }
+
+    override fun setColor(color: Color?) {
+        if (background.children.size >= 2) background.getChild(1).color = color
+        else super.setColor(color)
+    }
 }
 
 class PortraitUnavailableWonderForTechTree(name: String, size: Float) : Portrait(Type.Building, name, size) {

@@ -32,7 +32,7 @@ import com.unciv.ui.screens.basescreen.BaseScreen
  * @param ACT Type for [actionContext], Anything allowed, specific meaning defined only by ISortableGridContentProvider subclass
  * @param CT Type of the columns
  */
-class SortableGrid<IT, ACT, CT: ISortableGridContentProvider<IT, ACT>> (
+open class SortableGrid<IT, ACT, CT: ISortableGridContentProvider<IT, ACT>> (
     /** Provides the columns to render as [ISortableGridContentProvider] instances */
     private val columns: Iterable<CT>,
     /** Provides the actual "data" as in one object per row that can then be passed to [ISortableGridContentProvider] methods to fetch cell content.
