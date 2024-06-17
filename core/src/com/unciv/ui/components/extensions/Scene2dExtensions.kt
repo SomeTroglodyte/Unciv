@@ -344,14 +344,15 @@ fun WidgetGroup.packIfNeeded(): WidgetGroup {
 /** @return `true` if the screen is narrower than 4:3 landscape */
 fun Stage.isNarrowerThan4to3() = viewport.screenHeight * 4 > viewport.screenWidth * 3
 
-/** Wraps and returns an image in a [Group] of a given size*/
+/** Wraps and returns an image in a [Group] of a given size */
 fun Image.toGroup(size: Float): Group {
-    return Group().apply {
+    return Group().also {
+        it.setSize(size, size)
         setSize(size, size)
-        this@toGroup.setSize(size, size)
-        this@toGroup.center(this)
-        this@toGroup.setOrigin(Align.center)
-        addActor(this@toGroup) }
+        center(it)
+        setOrigin(Align.center)
+        it.addActor(this)
+    }
 }
 
 /** Adds actor to a [Group] and centers it */
