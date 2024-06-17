@@ -25,6 +25,12 @@ enum class EmpireOverviewCategories(
         override fun showDisabled(viewingPlayer: Civilization) = viewingPlayer.cities.isEmpty()
         override fun getPersistDataClass() = CityOverviewTab.CityTabPersistableData::class.java
     },
+    Buildings("OtherIcons/Buildings", 'B', Align.topLeft) {
+        override fun createTab(viewingPlayer: Civilization, overviewScreen: EmpireOverviewScreen, persistedData: EmpireOverviewTabPersistableData?) =
+            BuildingsOverviewTab(viewingPlayer, overviewScreen, persistedData)
+        override fun showDisabled(viewingPlayer: Civilization) = viewingPlayer.cities.isEmpty()
+        override fun getPersistDataClass() = BuildingsOverviewTab.BuildingTabPersistableData::class.java
+    },
     Stats("StatIcons/Gold", 'S', Align.top) {
         override fun createTab(viewingPlayer: Civilization, overviewScreen: EmpireOverviewScreen, persistedData: EmpireOverviewTabPersistableData?) =
                 StatsOverviewTab(viewingPlayer, overviewScreen)
