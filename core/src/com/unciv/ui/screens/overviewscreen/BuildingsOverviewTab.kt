@@ -17,11 +17,38 @@ import com.unciv.ui.components.extensions.setSize
 import com.unciv.ui.components.extensions.surroundWithCircle
 import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.input.onClick
+import com.unciv.ui.components.input.onRightClick
 import com.unciv.ui.components.widgets.SortableGrid
 import com.unciv.ui.components.widgets.TabbedPager
 import com.unciv.ui.images.ImageGetter
+import com.unciv.ui.popups.CityScreenConstructionMenu
 import com.unciv.ui.screens.basescreen.BaseScreen
+import com.unciv.ui.screens.cityscreen.CityScreen
 
+// todo Layout quirk after initial update() or after-click update()
+// todo Persist sort state, but only per run, not in GameSettings (mods can change)?
+// todo Context menu - should it display city and building name?
+// todo Untested for zero "buildings to show", as it it impossible in G&K once a City is founded: You can always build a Monument - but in Mods?
+
+/**
+ *  Another page for the Empire Overview: A buildings by city (or cities by building) grid.
+ *  - Transposable: Like Resource Overview does manually, a click can transpose columns with rows and back
+ *  - Sortable: Sorting by a building's "status" in a city is not extremely useful - but comes free, and maybe somebody will profit
+ *  - Lateinit: Does not construct all its data and widgets the moment Empire Overview opens, but only when it is looked at.
+ *
+ *  Features:
+ *  - Building icon color-coded according to can't be built / can be built / is queued / is built
+ *  - Can queue / unqueue with single clicks
+ *  - Supports the same right-click context menu as CityScreen
+ *
+ *  Architecture notes:
+ *  - Large number of nested classes: May seem confusing at first, but I hope it's fairly simple at the end:
+ *      - Transposable means rows can be cities or buildings, and columns can be cities or buildings: each gets a distinct subclass
+ *      - But there's much in common, so each orientation-specific subclass has an intermediate super for properties common to both orientations
+ *      - Two types of columns: The first is always a name, the rest are dynamic and all similar, thus separate class hierarchies for these two
+ *      - Other SortableGrid clients do their columns as enum: This demonstrates the framework is flexible enough for a dynamic solution.
+ *  - Most of these `inner`: Could refactor without and replace the closure-access with explicit parameters, those would not be many, but it's shorter to read this way.
+ */
 class BuildingsOverviewTab(
     viewingPlayer: Civilization,
     overviewScreen: EmpireOverviewScreen,
@@ -43,6 +70,7 @@ class BuildingsOverviewTab(
     }
 
     private val buildingsToShow = gameInfo.ruleset.buildings.values.filter { building ->
+        !building.isAnyWonder() &&
         viewingPlayer.cities.any { city ->
             city.cityConstructions.isBuilt(building.name)
                 || city.cityConstructions.isBeingConstructedOrEnqueued(building.name)
@@ -175,68 +203,71 @@ class BuildingsOverviewTab(
     private class BuildingNameColumn(private val toggle: ()->Unit) : NameColumn<Building>() {
         override fun getHeaderActor(iconSize: Float) = getHeaderActor("Building name", iconSize, 0f, toggle)
         override fun getEntryActor(item: Building, iconSize: Float, actionContext: EmpireOverviewScreen) =
-            item.name.toLabel(if (item.isAnyWonder()) Color.GOLD else Color.WHITE, hideIcons = true)
+            item.name.toLabel(hideIcons = true)
                 .onClick { actionContext.openCivilopedia(item.makeLink()) }
     }
     private class CityNameColumn(private val toggle: ()->Unit) : NameColumn<City>() {
         override fun getHeaderActor(iconSize: Float) = getHeaderActor("City name", iconSize, 90f, toggle)
         override fun getEntryActor(item: City, iconSize: Float, actionContext: EmpireOverviewScreen) =
             item.name.toLabel(if (item.isInResistance()) Color.FIREBRICK else Color.WHITE, hideIcons = true)
+                .onClick { actionContext.game.pushScreen(CityScreen(item)) }
     }
 
-    private class CityColumn(private val city: City) : ISortableGridContentProvider<Building, EmpireOverviewScreen> {
-        override val headerTip get() = city.name
+    private abstract inner class RepeatedColumnCommon<IT> : ISortableGridContentProvider<IT, EmpireOverviewScreen> {
         override val align get() = Align.center
         override val fillX get() = false
         override val expandX get() = false
         override val equalizeHeight get() = false
         override val defaultSort get() = SortableGrid.SortDirection.Descending
-        override fun getHeaderActor(iconSize: Float) = ImageGetter.getImage("OtherIcons/Cities").apply { setSize(iconSize) }
-        override fun getEntryValue(item: Building) = when {
-            city.cityConstructions.isBuilt(item.name) -> 3
-            city.cityConstructions.isBeingConstructedOrEnqueued(item.name) -> 2
-            city.cityConstructions.canAddToQueue(item) -> 1
-            else -> 0
-        }
-        override fun getEntryActor(item: Building, iconSize: Float, actionContext: EmpireOverviewScreen): Actor? {
-            val value = getEntryValue(item)
-            if (value == 0) return null
-            val icon = ImageGetter.getConstructionPortrait(item.name, iconSize)
-            icon.color = when(value) {
-                1 -> canAddColor
-                2 -> queuedColor
-                else -> isBuiltColor
-            }
-            return icon
-        }
-        override fun getTotalsActor(items: Iterable<Building>) = items.count { getEntryValue(it) == 3 }.toCenteredLabel()
-    }
 
-    private class BuildingColumn(private val building: Building) : ISortableGridContentProvider<City, EmpireOverviewScreen> {
-        override val headerTip get() = building.name
-        override val align get() = Align.center
-        override val fillX get() = false
-        override val expandX get() = false
-        override val equalizeHeight get() = false
-        override val defaultSort get() = SortableGrid.SortDirection.Descending
-        override fun getHeaderActor(iconSize: Float) = ImageGetter.getConstructionPortrait(building.name, iconSize)
-        override fun getEntryValue(item: City) = when {
-            item.cityConstructions.isBuilt(building.name) -> 3
-            item.cityConstructions.isBeingConstructedOrEnqueued(building.name) -> 2
-            item.cityConstructions.canAddToQueue(building) -> 1
+        protected fun getEntryValue(city: City, building: Building) = when {
+            city.cityConstructions.isBuilt(building.name) -> 3
+            city.cityConstructions.isBeingConstructedOrEnqueued(building.name) -> 2
+            city.cityConstructions.canAddToQueue(building) -> 1
             else -> 0
         }
-        override fun getEntryActor(item: City, iconSize: Float, actionContext: EmpireOverviewScreen): Actor? {
-            val value = getEntryValue(item)
+        protected fun getEntryActor(city: City, building: Building, iconSize: Float, actionContext: EmpireOverviewScreen): Actor? {
+            val value = getEntryValue(city, building)
             if (value == 0) return null
             val icon = ImageGetter.getConstructionPortrait(building.name, iconSize)
             icon.color = when(value) {
-                1 -> canAddColor
-                2 -> queuedColor
+                1 -> {
+                    icon.onClick {
+                        city.cityConstructions.addToQueue(building)
+                        update()
+                    }
+                    canAddColor
+                }
+                2 -> {
+                    icon.onClick {
+                        city.cityConstructions.removeAllByName(building.name)
+                        update()
+                    }
+                    queuedColor
+                }
                 else -> isBuiltColor
+            }
+            icon.onRightClick {
+                CityScreenConstructionMenu(actionContext.stage, icon, city, building) {
+                    update()
+                }
             }
             return icon
         }
-        override fun getTotalsActor(items: Iterable<City>) = items.count { getEntryValue(it) == 3 }.toCenteredLabel()
+        override fun getTotalsActor(items: Iterable<IT>) = items.count { getEntryValue(it) == 3 }.toCenteredLabel()
+    }
+
+    private inner class CityColumn(private val city: City) : RepeatedColumnCommon<Building>() {
+        override val headerTip get() = city.name
+        override fun getHeaderActor(iconSize: Float) = ImageGetter.getImage("OtherIcons/Cities").apply { setSize(iconSize) }
+        override fun getEntryValue(item: Building) = getEntryValue(city, item)
+        override fun getEntryActor(item: Building, iconSize: Float, actionContext: EmpireOverviewScreen) = getEntryActor(city, item, iconSize, actionContext)
+    }
+
+    private inner class BuildingColumn(private val building: Building) : RepeatedColumnCommon<City>() {
+        override val headerTip get() = building.name
+        override fun getHeaderActor(iconSize: Float) = ImageGetter.getConstructionPortrait(building.name, iconSize)
+        override fun getEntryValue(item: City) = getEntryValue(item, building)
+        override fun getEntryActor(item: City, iconSize: Float, actionContext: EmpireOverviewScreen) = getEntryActor(item, building, iconSize, actionContext)
     }
 }
