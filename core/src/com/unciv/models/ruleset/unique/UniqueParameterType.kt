@@ -74,7 +74,8 @@ enum class UniqueParameterType(
             Stat.isStat(parameterText) -> true
             parameterText in ruleset.tileResources -> true
             parameterText in ruleset.units -> true
-            parameterText.removeSuffix(" units").removeSurrounding("[", "]") in ruleset.unitTypes -> true
+            parameterText.removeSuffix(" Units").removeSurrounding("[", "]") in ruleset.unitTypes -> true
+            parameterText.removeSuffix(" Buildings").removeSurrounding("[", "]") in ruleset.buildings -> true
             else -> parameterText in ruleset.buildings
         }
     },
@@ -105,6 +106,7 @@ enum class UniqueParameterType(
 
         override fun isKnownValue(parameterText: String, ruleset: Ruleset) = when {
             parameterText in knownValues -> true
+            parameterText in ruleset.unitPromotions -> true
             ruleset.unitPromotions.values.any { it.hasUnique(parameterText) } -> true
             CivFilter.isKnownValue(parameterText, ruleset) -> true
             else -> BaseUnitFilter.isKnownValue(parameterText, ruleset)
@@ -417,6 +419,21 @@ enum class UniqueParameterType(
     /** Used by [UniqueType.OneTimeConsumeResources], [UniqueType.OneTimeProvideResources], [UniqueType.CostsResources], [UniqueType.UnitActionStockpileCost], implementation not centralized */
     StockpiledResource("stockpiledResource", "Mana", "The name of any stockpiled resource") {
         override fun isKnownValue(parameterText: String, ruleset: Ruleset) = ruleset.tileResources[parameterText]?.isStockpiled() == true
+    },
+
+    /** Used by [UniqueType.ImprovesResources], implemented by [com.unciv.models.ruleset.tile.TileResource.matchesFilter] */
+    ResourceFilter("resourceFilter", "Strategic", "A resource name, type, 'all', or a Stat listed in the resource's improvementStats",
+        severityDefault = UniqueType.UniqueParameterErrorSeverity.PossibleFilteringUnique
+    ) {
+        private val knownValues = setOf("any") + Constants.all // "any" sounds nicer than "all" in that UniqueType
+        override fun isKnownValue(parameterText: String, ruleset: Ruleset) = when {
+            parameterText in knownValues -> true
+            parameterText in ruleset.tileResources -> true
+            ResourceType.values().any { it.name == parameterText } -> true
+            Stat.isStat(parameterText) -> true
+            else -> false
+        }
+        override fun getTranslationWriterStringsForOutput() = knownValues
     },
 
     /** Used by [UniqueType.FreeExtraBeliefs], see ReligionManager.getBeliefsToChooseAt* functions */

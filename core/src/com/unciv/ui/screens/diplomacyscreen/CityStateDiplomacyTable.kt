@@ -17,7 +17,7 @@ import com.unciv.logic.civilization.diplomacy.RelationshipLevel
 import com.unciv.logic.civilization.managers.AssignedQuest
 import com.unciv.logic.trade.TradeLogic
 import com.unciv.logic.trade.TradeOffer
-import com.unciv.logic.trade.TradeType
+import com.unciv.logic.trade.TradeOfferType
 import com.unciv.models.ruleset.Quest
 import com.unciv.models.ruleset.tile.ResourceType
 import com.unciv.models.ruleset.unique.UniqueType
@@ -179,7 +179,7 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
                 .getCityStateBonuses(otherCiv.cityStateType, level)
                 .filterNot { it.isHiddenToUsers() }
             if (bonuses.none()) return ""
-            return (sequenceOf(header) + bonuses.map { it.text }).joinToString(separator = "\n") { it.tr() }
+            return (sequenceOf(header) + bonuses.map { it.getDisplayText() }).joinToString(separator = "\n") { it.tr() }
         }
         fun addBonusLabel(header: String, bonusLevel: RelationshipLevel, relationLevel: RelationshipLevel) {
             val bonusLabelColor = if (relationLevel == bonusLevel) Color.GREEN else Color.GRAY
@@ -251,13 +251,13 @@ class CityStateDiplomacyTable(private val diplomacyScreen: DiplomacyScreen) {
                 tradeLogic.currentTrade.ourOffers.add(
                     TradeOffer(
                         Constants.peaceTreaty,
-                        TradeType.Treaty
+                        TradeOfferType.Treaty
                     )
                 )
                 tradeLogic.currentTrade.theirOffers.add(
                     TradeOffer(
                         Constants.peaceTreaty,
-                        TradeType.Treaty
+                        TradeOfferType.Treaty
                     )
                 )
                 tradeLogic.acceptTrade()

@@ -353,6 +353,7 @@ class Civilization : IsPartOfGameInfoSerialization {
     fun isAI() = playerType == PlayerType.AI
     fun isAIOrAutoPlaying(): Boolean {
         if (playerType == PlayerType.AI) return true
+        if (gameInfo.isSimulation()) return true
         val worldScreen = UncivGame.Current.worldScreen ?: return false
         return worldScreen.viewingCiv == this && worldScreen.autoPlay.isAutoPlaying()
     }
@@ -361,8 +362,13 @@ class Civilization : IsPartOfGameInfoSerialization {
     fun isCurrentPlayer() = gameInfo.currentPlayerCiv == this
     fun isMajorCiv() = nation.isMajorCiv
     fun isMinorCiv() = nation.isCityState || nation.isBarbarian
-    fun isCityState(): Boolean = nation.isCityState
-    fun isBarbarian() = nation.isBarbarian
+
+    @delegate:Transient
+    val isCityState by lazy { nation.isCityState }
+
+    @delegate:Transient
+    val isBarbarian by lazy { nation.isBarbarian }
+
     fun isSpectator() = nation.isSpectator
     fun isAlive(): Boolean = !isDefeated()
 
@@ -427,7 +433,11 @@ class Civilization : IsPartOfGameInfoSerialization {
             stats.happiness < it != previousHappiness < it // If move from being below them to not, or vice versa
             })
             for (city in cities) city.cityStats.update(updateCivStats = false)
-        stats.statsForNextTurn = stats.getStatMapForNextTurn().values.reduce { a, b -> a + b }
+        val statMapForNextTurn = stats.getStatMapForNextTurn()
+
+        val newStats = Stats()
+        for (stats in statMapForNextTurn.values) newStats.add(stats)
+        stats.statsForNextTurn = newStats
     }
 
     fun getHappiness() = stats.happiness
@@ -480,6 +490,14 @@ class Civilization : IsPartOfGameInfoSerialization {
         return getCivResourcesByName()[resourceName] ?: 0
     }
 
+    /** Gets modifiers for ALL resources */
+    fun getResourceModifiers(): HashMap<String, Float> {
+        val resourceModifers = HashMap<String, Float>()
+        for (resource in gameInfo.ruleset.tileResources.values)
+            resourceModifers[resource.name] = getResourceModifier(resource)
+        return resourceModifers
+    }
+
     fun getResourceModifier(resource: TileResource): Float {
         var resourceModifier = 1f
         for (unique in getMatchingUniques(UniqueType.DoubleResourceProduced))
@@ -514,8 +532,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         yieldAll(getEra().getMatchingUniques(uniqueType, stateForConditionals))
         yieldAll(cityStateFunctions.getUniquesProvidedByCityStates(uniqueType, stateForConditionals))
         if (religionManager.religion != null)
-            yieldAll(religionManager.religion!!.getFounderUniques()
-                .filter { !it.isTimedTriggerable && it.type == uniqueType && it.conditionalsApply(stateForConditionals) })
+            yieldAll(religionManager.religion!!.founderBeliefUniqueMap.getMatchingUniques(uniqueType, stateForConditionals))
 
         yieldAll(getCivResourceSupply().asSequence()
             .filter { it.amount > 0 }
@@ -534,18 +551,19 @@ class Civilization : IsPartOfGameInfoSerialization {
             .flatMap { city -> city.cityConstructions.builtBuildingUniqueMap.getTriggeredUniques(trigger, stateForConditionals) }
         )
         if (religionManager.religion != null)
-            yieldAll(religionManager.religion!!.getFounderUniques()
-                .filter { unique -> unique.conditionals.any { it.type == trigger }
-                    && unique.conditionalsApply(stateForConditionals) })
+            yieldAll(religionManager.religion!!.founderBeliefUniqueMap.getMatchingUniques(trigger, stateForConditionals))
         yieldAll(policies.policyUniques.getTriggeredUniques(trigger, stateForConditionals))
         yieldAll(tech.techUniques.getTriggeredUniques(trigger, stateForConditionals))
         yieldAll(getEra().uniqueMap.getTriggeredUniques (trigger, stateForConditionals))
         yieldAll(gameInfo.ruleset.globalUniques.uniqueMap.getTriggeredUniques(trigger, stateForConditionals))
     }.toList() // Triggers can e.g. add buildings which contain triggers, causing concurrent modification errors
 
-    fun matchesFilter(filter: String): Boolean {
-        return MultiFilter.multiFilter(filter, ::matchesSingleFilter)
-    }
+
+    private val cachedMatchesFilterResult = HashMap<String, Boolean>()
+
+    /** Implements [UniqueParameterType.CivFilter][com.unciv.models.ruleset.unique.UniqueParameterType.CivFilter] */
+    fun matchesFilter(filter: String): Boolean =
+        cachedMatchesFilterResult.getOrPut(filter) { MultiFilter.multiFilter(filter, ::matchesSingleFilter ) }
 
     fun matchesSingleFilter(filter: String): Boolean {
         return when (filter) {
@@ -618,7 +636,7 @@ class Civilization : IsPartOfGameInfoSerialization {
      *  Otherwise, it stays 'alive' as long as it has cities (irrespective of settlers owned)
      */
     fun isDefeated() = when {
-        isBarbarian() || isSpectator() -> false     // Barbarians and voyeurs can't lose
+        isBarbarian || isSpectator() -> false     // Barbarians and voyeurs can't lose
         hasEverOwnedOriginalCapital -> cities.isEmpty()
         else -> units.getCivUnitsSize() == 0
     }
@@ -677,7 +695,7 @@ class Civilization : IsPartOfGameInfoSerialization {
     private fun calculateMilitaryMight(): Int {
         var sum = 1 // minimum value, so we never end up with 0
         for (unit in units.getCivUnits()) {
-            sum += if (unit.baseUnit.isWaterUnit())
+            sum += if (unit.baseUnit.isWaterUnit)
                 unit.getForceEvaluation() / 2   // Really don't value water units highly
             else
                 unit.getForceEvaluation()
@@ -869,10 +887,6 @@ class Civilization : IsPartOfGameInfoSerialization {
 
     fun addNotification(text: String, actions: Iterable<NotificationAction>?, category: NotificationCategory, vararg notificationIcons: String) {
         if (playerType == PlayerType.AI) return // no point in lengthening the saved game info if no one will read it
-        if (notifications.lastOrNull()?.let { it.text == text && it.category == category && it.icons == notificationIcons.toList() } == true) {
-            Log.debug("Duplicate notification \"%s\"", text)
-            return
-        }
         notifications.add(Notification(text, notificationIcons, actions, category))
     }
     // endregion
@@ -909,6 +923,8 @@ class Civilization : IsPartOfGameInfoSerialization {
             for (tradeRequest in diplomacyManager.otherCiv().tradeRequests.filter { it.requestingCiv == civName })
                 diplomacyManager.otherCiv().tradeRequests.remove(tradeRequest) // it  would be really weird to get a trade request from a dead civ
         }
+        if (gameInfo.isEspionageEnabled())
+            espionageManager.removeAllSpies()
     }
 
     fun updateProximity(otherCiv: Civilization, preCalculated: Proximity? = null): Proximity = cache.updateProximity(otherCiv, preCalculated)
