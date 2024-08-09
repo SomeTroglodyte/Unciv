@@ -23,6 +23,7 @@ import com.unciv.ui.components.extensions.toLabel
 import com.unciv.ui.components.widgets.ColorMarkupLabel
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
+import com.unciv.utils.DebugUtils
 import com.unciv.utils.Log
 import kotlin.math.max
 
@@ -83,8 +84,14 @@ class FormattedLine (
     // from json in the primary constructor parameters above. Everything else should be a fun(),
     // have no backing field, be `by lazy` or use @Transient, Thank you.
 
-    /** Looks for linkable ruleset objects in [Unique] parameters and returns a linked [FormattedLine] if successful, a plain one otherwise */
-    constructor(unique: Unique, indent: Int = 0) : this(unique.getDisplayText(), getUniqueLink(unique), indent = indent)
+    /** Looks for linkable ruleset objects in [Unique] parameters and returns a linked [FormattedLine] if successful, a plain one otherwise.
+     *  Untyped Uniques (Filtering ones) are colored purple if the debug option to show hidden uniques is on. */
+    constructor(unique: Unique, indent: Int = 0) : this(
+        unique.getDisplayText(),
+        getUniqueLink(unique),
+        indent = indent,
+        color = if (DebugUtils.NO_HIDDEN_UNIQUES && unique.type == null) "#B200FF" else ""
+    )
 
     /** Link types that can be used for [FormattedLine.link] */
     enum class LinkType {

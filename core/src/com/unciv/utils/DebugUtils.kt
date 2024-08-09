@@ -21,4 +21,6 @@ object DebugUtils {
      */
     var SIMULATE_UNTIL_TURN: Int = 0
 
+    /** Disables the effect of UniqueFlag.HiddenToUsers and UniqueType.ModifierHiddenFromUsers, so modders can see what's up in Civilopedia too */
+    var NO_HIDDEN_UNIQUES: Boolean = false
 }

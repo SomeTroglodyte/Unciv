@@ -77,6 +77,10 @@ fun debugTab(
         BaseScreen.enableSceneDebug = it
     }).colspan(2).row()
 
+    add("Show hidden Uniques".toCheckBox(DebugUtils.NO_HIDDEN_UNIQUES) {
+        DebugUtils.NO_HIDDEN_UNIQUES = it
+    }).colspan(2).row()
+
     add(Table().apply {
         add("Unique misspelling threshold".toLabel()).left().fillX()
         add(

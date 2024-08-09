@@ -12,6 +12,7 @@ import com.unciv.models.translations.getModifiers
 import com.unciv.models.translations.getPlaceholderParameters
 import com.unciv.models.translations.getPlaceholderText
 import com.unciv.models.translations.removeConditionals
+import com.unciv.utils.DebugUtils
 
 
 class Unique(val text: String, val sourceObjectType: UniqueTarget? = null, val sourceObjectName: String? = null) {
@@ -43,7 +44,7 @@ class Unique(val text: String, val sourceObjectType: UniqueTarget? = null, val s
     val isLocalEffect = params.contains("in this city") || hasModifier(UniqueType.ConditionalInThisCity)
 
     fun hasFlag(flag: UniqueFlag) = type != null && type.flags.contains(flag)
-    fun isHiddenToUsers() = hasFlag(UniqueFlag.HiddenToUsers) || hasModifier(UniqueType.ModifierHiddenFromUsers)
+    fun isHiddenToUsers() = !DebugUtils.NO_HIDDEN_UNIQUES && (hasFlag(UniqueFlag.HiddenToUsers) || hasModifier(UniqueType.ModifierHiddenFromUsers))
 
     fun getModifiers(type: UniqueType) = modifiers.asSequence().filter { it.type == type }
     fun hasModifier(type: UniqueType) = getModifiers(type).any()
