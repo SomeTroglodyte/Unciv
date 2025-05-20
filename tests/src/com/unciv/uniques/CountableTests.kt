@@ -66,15 +66,16 @@ class CountableTests {
 
     @Test
     fun testAllCountableParametersAreUniqueParameterTypes() {
+        val typeNames = UniqueParameterType.entries.map { it.parameterName }.toSet()
         for (countable in Countables.entries) {
             val parameters = countable.text.getPlaceholderParameters()
             for (parameter in parameters) {
-                assertNotEquals("Countable ${countable.name} parameter $parameter is not a UniqueParameterType",
-                    UniqueParameterType.safeValueOf(parameter), UniqueParameterType.Unknown)
+                assertEquals("Countable ${countable.name} parameter $parameter is not a UniqueParameterType",
+                    parameter in typeNames, true)
             }
         }
     }
-    
+
     @Test
     fun testPlaceholderParams(){
         val text = "when number of [Iron] is equal to [3 * 2 + [Iron] + [bob]]"

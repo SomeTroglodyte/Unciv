@@ -216,12 +216,12 @@ enum class Countables(
 
     open val documentationHeader get() =
         "`$text`" + (if (shortDocumentation.isEmpty()) "" else " - $shortDocumentation")
-    
+
     open val example: String
         get() {
             if (noPlaceholders) return text
             val placeholderParams = text.getPlaceholderParameters()
-                .map { UniqueParameterType.safeValueOf(it).docExample }
+                .mapNotNull { UniqueParameterType.safeValueOf(it)?.docExample }
             return text.fillPlaceholders(*placeholderParams.toTypedArray())
         }
 

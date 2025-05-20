@@ -1364,8 +1364,8 @@ enum class UniqueType(
 
     @Deprecated("as of 3.17.10 - removed 3.18.5", ReplaceWith("[+amount]% Production when constructing [stat] buildings [in all cities]"), DeprecationLevel.ERROR)
     PercentProductionStatBuildings("+[amount]% Production when constructing [stat] buildings", UniqueTarget.Global),
-    @Deprecated("as of 3.17.10 - removed 3.18.5", ReplaceWith("[+amount]% Production when constructing [constructionFilter] buildings [in all cities]"), DeprecationLevel.ERROR)
-    PercentProductionConstructions("+[amount]% Production when constructing [constructionFilter]", UniqueTarget.Global),
+    @Deprecated("as of 3.17.10 - removed 3.18.5", ReplaceWith("[+amount]% Production when constructing [buildingFilter] buildings [in all cities]"), DeprecationLevel.ERROR)
+    PercentProductionConstructions("+[amount]% Production when constructing [buildingFilter]", UniqueTarget.Global),
     @Deprecated("as of 3.17.10 - removed 3.18.5", ReplaceWith("[amount]% Production when constructing [buildingName] buildings [in all cities]"), DeprecationLevel.ERROR)
     PercentProductionBuildingName("+[amount]% Production when constructing a [buildingName]", UniqueTarget.Global),
     @Deprecated("as of 3.17.10 - removed 3.18.5", ReplaceWith("[amount]% Production when constructing [constructionFilter] buildings [cityFilter]"), DeprecationLevel.ERROR)
@@ -1453,7 +1453,7 @@ enum class UniqueType(
         for (placeholder in text.getPlaceholderParameters()) {
             val matchingParameterTypes = placeholder
                 .split('/')
-                .map { UniqueParameterType.safeValueOf(it.replace(numberRegex, "")) }
+                .mapNotNull { UniqueParameterType.safeValueOf(it.replace(numberRegex, "")) }
             map.add(matchingParameterTypes)
         }
         return map
