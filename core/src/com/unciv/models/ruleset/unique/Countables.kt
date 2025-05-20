@@ -1,5 +1,6 @@
 package com.unciv.models.ruleset.unique
 
+import com.unciv.models.ModConstants
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.unique.expressions.Expressions
 import com.unciv.models.ruleset.unique.expressions.Operator
@@ -156,6 +157,56 @@ enum class Countables(
 
         override val example = "Iron"
         override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = ruleset.tileResources.keys
+    },
+
+    EraNumber("era number", shortDocumentation = "Number of the era the current player is in") {
+        override val documentationStrings = listOf("Zero-based index of the Era in Eras.json.")
+        override fun eval(parameterText: String, stateForConditionals: StateForConditionals) =
+            stateForConditionals.civInfo?.getEraNumber()
+    },
+
+    GameSpeedModifier("game speed modifier for [stat]", shortDocumentation = "A game speed modifier for a specific Stat as percentage") {
+        override val documentationStrings = listOf(
+            "Chooses an appropriate field from the Speeds.json entry the player has chosen.",
+            "It is returned multiplied by 100.",
+            "Food and Happiness return the generic `modifier` field.",
+            "Other fields like `goldGiftModifier` or `barbarianModifier` are not accessible with this Countable."
+        )
+        override fun eval(parameterText: String, stateForConditionals: StateForConditionals): Int? {
+            val stat = Stat.safeValueOf(parameterText.getPlaceholderParameters()[0]) ?: return null
+            val speed = stateForConditionals.gameInfo?.speed ?: return null
+            return when(stat) {
+                Stat.Gold -> speed.goldCostModifier
+                Stat.Production -> speed.productionCostModifier
+                Stat.Food -> speed.modifier
+                Stat.Science -> speed.scienceCostModifier
+                Stat.Culture -> speed.cultureCostModifier
+                Stat.Happiness -> speed.modifier
+                Stat.Faith -> speed.faithCostModifier
+            }.times(100).toInt()
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
+            if (Stat.isStat(parameterText.getPlaceholderParameters()[0])) null else UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = Stat.entries.map { placeholderText.fillPlaceholders(it.name) }.toSet()
+    },
+
+    ModConstant("ModConstant [param]", "Retrieves a field from ModConstants as percentage") {
+        override val documentationStrings = listOf(
+            "Integer values are returned directly, but floating-point values are multiplied by 100 to allow treating them like a percentage.",
+            "You cannot retrieve values of nested structures, e.g. \"ModConstant [unitUpgradeCost.base]\" will fail."
+        )
+        override fun eval(parameterText: String, stateForConditionals: StateForConditionals): Int? {
+            val fieldName = parameterText.getPlaceholderParameters()[0]
+            val modConstants = stateForConditionals.gameInfo?.ruleset?.modOptions?.constants ?: return null
+            val value = modConstants[fieldName]
+            return (value as? Int) ?: (value as? Float)?.times(100)?.toInt()
+        }
+        override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? {
+            val fieldName = parameterText.getPlaceholderParameters()[0]
+            return if (ModConstants::class.java.declaredFields.any { it.name == fieldName }) null
+                else UniqueType.UniqueParameterErrorSeverity.RulesetInvariant
+        }
+        override fun getKnownValuesForAutocomplete(ruleset: Ruleset) = emptySet<String>()
     },
 
     /** Please leave this one in, it is tested against in [com.unciv.uniques.CountableTests.testRulesetValidation] */

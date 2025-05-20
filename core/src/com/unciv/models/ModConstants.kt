@@ -119,10 +119,17 @@ class ModConstants {
     var spyRankStealPercentBonus = 25
     // Steal cost equal to 125% of the most expensive stealable tech
     var spyTechStealCostModifier = 1.25f
-    
+
     // Score value of things
     var scoreFromPopulation = 3 // 4 in BNW
     var scoreFromWonders = 40 // 25 in BNW
+
+    // Gold for great merchant trade missions
+    // http://civilization.wikia.com/wiki/Great_Merchant_(Civ5)
+    @Suppress("unused")  // Retrieved using the ModConstant Countable which uses reflection
+    var tradeMissionBaseGold = 350 // 300 in BNW
+    @Suppress("unused")
+    var tradeMissionEraMultiplier = 50 // 100 in BNW
 
     // UI: If set >= 0, ImprovementPicker will silently skip improvements whose tech requirement is more advanced than your current Era + this
     var maxImprovementTechErasForward = -1
@@ -179,6 +186,12 @@ class ModConstants {
         sb.deleteCharAt(sb.length - 1) // remove extra ',' with StringBuilder method
         sb.append('}')
         return sb.toString().takeUnless { it == "}" } ?: "defaults"
+    }
+
+    operator fun get(fieldName: String): Number? {
+        // getDeclaredField throws, this is easier than try-catch:
+        val field = this::class.java.declaredFields.firstOrNull { it.name == fieldName } ?: return null
+        return field.get(this) as? Number
     }
 
     companion object {
