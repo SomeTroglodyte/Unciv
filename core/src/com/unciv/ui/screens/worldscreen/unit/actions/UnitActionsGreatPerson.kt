@@ -7,6 +7,8 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.UnitAction
 import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.Building
+import com.unciv.models.ruleset.unique.Countables
+import com.unciv.models.ruleset.unique.StateForConditionals
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.ui.components.extensions.toPercent
 import kotlin.math.min
@@ -107,8 +109,11 @@ object UnitActionsGreatPerson {
             yield(UnitAction(
                 UnitActionType.ConductTradeMission, 70f,
                 action = {
-                    // http://civilization.wikia.com/wiki/Great_Merchant_(Civ5)
-                    var goldEarned = (350 + 50 * unit.civ.getEraNumber()) * unit.civ.gameInfo.speed.goldCostModifier
+                    val state = StateForConditionals(unit)
+                    var goldEarned = unit.getMatchingUniques(UniqueType.CalculateGoldFromTradeMission)
+                        .map { it.params[0] }
+                        .mapNotNull { Countables.getCountableAmount(it, state) }
+                        .sum().toFloat()
                     for (goldUnique in unit.civ.getMatchingUniques(UniqueType.PercentGoldFromTradeMissions))
                         goldEarned *= goldUnique.params[0].toPercent()
                     unit.civ.addGold(goldEarned.toInt())
