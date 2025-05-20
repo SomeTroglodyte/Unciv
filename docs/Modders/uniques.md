@@ -1666,6 +1666,11 @@ Simple unique parameters are explained by mouseover. Complex parameters are expl
 
 	Applicable to: Global, Unit
 
+??? example  "[countable] gold from conducting a trade mission"
+	Example: "[1000] gold from conducting a trade mission"
+
+	Applicable to: Unit
+
 ??? example  "Great General provides double combat bonus"
 	Applicable to: Global, Unit
 

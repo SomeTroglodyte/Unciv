@@ -2,6 +2,7 @@ package com.unciv.uniques
 
 import com.unciv.logic.city.City
 import com.unciv.logic.civilization.Civilization
+import com.unciv.models.UnitActionType
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.unique.Countables
 import com.unciv.models.ruleset.unique.StateForConditionals
@@ -15,8 +16,8 @@ import com.unciv.models.translations.getPlaceholderParameters
 import com.unciv.models.translations.getPlaceholderText
 import com.unciv.testing.GdxTestRunner
 import com.unciv.testing.TestGame
+import com.unciv.ui.screens.worldscreen.unit.actions.UnitActions
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -30,39 +31,33 @@ class CountableTests {
     private lateinit var civ: Civilization
     private lateinit var city: City
 
-//    @Test
-//    fun testCountableConventions() {
-//        fun Class<out Countables>.hasOverrideFor(name: String, vararg args: Class<out Any>): Boolean {
-//            try {
-//                getDeclaredMethod(name, *args)
-//            } catch (ex: NoSuchMethodException) {
-//                return false
-//            }
-//            return true
-//        }
-//
-//        var fails = 0
-//        println("Reflection check of the Countables class:")
-//        for (instance in Countables::class.java.enumConstants) {
-//            val instanceClazz = instance::class.java
-//
-//            val matchesOverridden = instanceClazz.hasOverrideFor("matches", String::class.java, Ruleset::class.java)
-//            if (instance.text.isEmpty() && !matchesOverridden) {
-//                println("`$instance` has no `text` but fails to override `matches`.")
-//                fails++
-//            }
-//
-//            val getErrOverridden = instanceClazz.hasOverrideFor("getErrorSeverity", String::class.java, Ruleset::class.java)
-//            if (instance.noPlaceholders && getErrOverridden) {
-//                println("`$instance` has no placeholders but overrides `getErrorSeverity` which is likely an error.")
-//                fails++
-//            } else if (!instance.noPlaceholders && !getErrOverridden) {
-//                println("`$instance` has placeholders that must be treated and therefore **must** override `getErrorSeverity` but does not.")
-//                fails++
-//            }
-//        }
-//        assertEquals("failure count", 0, fails)
-//    }
+    @Test
+    fun testCountableConventions() {
+       fun Class<out Countables>.hasOverrideFor(name: String, vararg args: Class<out Any>): Boolean {
+           try {
+               getDeclaredMethod(name, *args)
+           } catch (ex: NoSuchMethodException) {
+               return false
+           }
+           return true
+       }
+
+       var fails = 0
+       println("Reflection check of the Countables class:")
+       for (instance in Countables::class.java.enumConstants) {
+           val instanceClazz = instance::class.java
+
+           val getErrOverridden = instanceClazz.hasOverrideFor("getErrorSeverity", String::class.java, Ruleset::class.java)
+           if (instance.noPlaceholders && getErrOverridden) {
+               println("`$instance` has no placeholders but overrides `getErrorSeverity` which is likely an error.")
+               fails++
+           } else if (!instance.noPlaceholders && !getErrOverridden) {
+               println("`$instance` has placeholders that must be treated and therefore **must** override `getErrorSeverity` but does not.")
+               fails++
+           }
+       }
+       assertEquals("failure count", 0, fails)
+    }
 
     @Test
     fun testAllCountableParametersAreUniqueParameterTypes() {
@@ -187,6 +182,62 @@ class CountableTests {
 
         assertEquals(6f, capitalCulture, 0.005f)
         assertEquals(10.5f, civCulture, 0.005f)
+    }
+
+    @Test
+    fun testEraNumberCountable() {
+        setupModdedGame()
+        val eraAncient = Countables.getCountableAmount("era number", civ.state)
+        civ.tech.addTechnology("Horseback Riding", false)
+        val eraClassical = Countables.getCountableAmount("era number", civ.state)
+        civ.tech.addTechnology("Future Tech", false)
+        val eraFuture = Countables.getCountableAmount("era number", civ.state)
+        val actual = listOf(eraAncient, eraClassical, eraFuture)
+        val expected = listOf(0, 1, 8)
+        assertEquals("Countable \"era number\" should find the correct era numbers", expected, actual)
+    }
+
+    @Test
+    fun testGameSpeedCountable() {
+        setupModdedGame()
+        for ((name, speed) in game.ruleset.speeds) {
+            game.gameInfo.speed = speed
+            assertEquals("Countable.GameSpeedModifier should retrieve the correct modifier for speed \"$name\" and stat \"Gold\"",
+                (speed.goldCostModifier * 100).toInt(),
+                Countables.getCountableAmount("game speed modifier for [Gold]", civ.state)!!)
+            assertEquals("Countable.GameSpeedModifier should retrieve the correct modifier for speed \"$name\" and stat \"Production\"",
+                (speed.productionCostModifier * 100).toInt(),
+                Countables.getCountableAmount("game speed modifier for [Production]", civ.state)!!)
+            assertEquals("Countable.GameSpeedModifier should retrieve the correct modifier for speed \"$name\" and stat \"Faith\"",
+                (speed.faithCostModifier * 100).toInt(),
+                Countables.getCountableAmount("game speed modifier for [Faith]", civ.state)!!)
+        }
+    }
+
+    @Test
+    fun testModOptionsCountable() {
+        setupModdedGame()
+        var actual = Countables.getCountableAmount("ModConstant [goldGiftTradeMultiplier]", civ.state)
+        var expected = (game.ruleset.modOptions.constants.goldGiftTradeMultiplier * 100).toInt()
+        assertEquals("Retrieving \"ModConstant [goldGiftTradeMultiplier]\"", expected, actual)
+        actual = Countables.getCountableAmount("ModConstant [maxXPfromBarbarians]", civ.state)
+        expected = game.ruleset.modOptions.constants.maxXPfromBarbarians
+        assertEquals("Retrieving \"ModConstant [maxXPfromBarbarians]\"", expected, actual)
+        actual = Countables.getCountableAmount("ModConstant [unitUpgradeCost]", civ.state)
+        assertEquals("Retrieving \"ModConstant [unitUpgradeCost]\" should return null", null, actual)
+    }
+
+    @Test
+    fun testGreatMerchantTradeMission() {
+        setupModdedGame()
+        val cityState = game.addCiv(cityStateType = "Mercantile")
+        val cityStateCity = game.addCity(cityState, game.tileMap[-2,0])
+        val merchant = game.addUnit("Great Merchant", civ, game.tileMap[-1,0])
+        val before = civ.gold
+        UnitActions.invokeUnitAction(merchant, UnitActionType.ConductTradeMission)
+        val actual = civ.gold - before
+        val expected = (350 + 50 * civ.getEraNumber() * game.gameInfo.speed.goldCostModifier).toInt()
+        assertEquals(expected, actual)
     }
 
     @Test

@@ -372,6 +372,17 @@ Allowed values:
     - Can be city stats or civilization stats, depending on where the unique is used
     - For example: If a unique is placed on a building, then the retrieved resources will be of the city. If placed on a policy, they will be of the civilization.
     - This can make a difference for e.g. local resources, which are counted per city.
+-   `era number` - Number of the era the current player is in
+    - Example: `Only available <when number of [era number] is more than [0]>`
+    - Zero-based index of the Era in Eras.json.
+-   `game speed modifier for [Stat]` - A game speed modifier for a specific Stat as percentage
+    - Example: `Only available <when number of [game speed modifier for [Unknown]] is more than [0]>`
+    - Chooses an appropriate field from the Speeds.json entry the player has chosen.
+    - It is returned multiplied by 100.
+    - Food and Happiness return the generic `modifier` field.
+    - Other fields like `goldGiftModifier` or `barbarianModifier` are not accessible with this Countable.
+-   `ModConstant [modConstant]` - Retrieves a field from ModConstants as percentage
+    - Example: `Only available <when number of [ModConstant [Unknown]] is more than [0]>`
 -   Evaluate expressions!
     - Example: `Only available <when number of [[Iron] + 2] is more than [0]>`
     - Expressions support arbitrary math operations, and can include other countables, when surrounded by square brackets.
