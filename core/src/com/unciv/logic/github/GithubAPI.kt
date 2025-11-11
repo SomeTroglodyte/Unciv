@@ -302,10 +302,13 @@ object GithubAPI {
 
         html_url = url
         default_branch = "master"
+
+        /** First priority: recognize regular GitHub repo zip links*/
         val matchZip = Regex("""^(.*/(.*)/(.*))/archive/(?:.*/)?heads/([^.]+).zip$""").matchEntire(url)
         if (matchZip != null && matchZip.groups.size > 4)
             return processMatch(matchZip)
 
+        /** Now look for GitHub tree links (those can be e.g. tags or branches - commit hashes too) */
         val matchBranch = Regex("""^(.*/(.*)/(.*))/tree/(.*)$""").matchEntire(url)
         if (matchBranch != null && matchBranch.groups.size > 4)
             return processMatch(matchBranch)
@@ -316,6 +319,7 @@ object GithubAPI {
         // TODO Query a specific release for its name attribute - the page will link the tag
         // https://docs.github.com/en/rest/releases/releases#get-a-release-by-tag-name
 
+        /** Now look for tag archive links */
         val matchTagArchive = Regex("""^(.*/(.*)/(.*))/archive/(?:.*/)?tags/([^.]+).zip$""").matchEntire(url)
         if (matchTagArchive != null && matchTagArchive.groups.size > 4) {
             processMatch(matchTagArchive)
@@ -325,6 +329,8 @@ object GithubAPI {
             direct_zip_url = url
             return this
         }
+
+        /** Now look for a release tag info page and translate to the respective archive */
         val matchTagPage = Regex("""^(.*/(.*)/(.*))/releases/(?:.*/)?tag/([^.]+)$""").matchEntire(url)
         if (matchTagPage != null && matchTagPage.groups.size > 4) {
             processMatch(matchTagPage)
@@ -333,14 +339,27 @@ object GithubAPI {
             return this
         }
 
+        /** Now look for GitHub specific commit archive links */
+        // One could try asking which branch(es) that commit is head of:https://docs.github.com/en/rest/commits/commits?apiVersion=2022-11-28#list-branches-for-head-commit
+        // GithubAPI.request { url("/repos/${owner.login}/$name/commits/$default_branch/branches-where-head") }.bodyAsText()
+        // ...but in most cases that would be empty for commits merged into master.
+        // We will leave the commit hash in the default_branch field - if that leads to problems later, we'll deal with it then (a tree link would too see above).
         val matchCommit = Regex("""^(.*/(.*)/(.*))/archive/([0-9a-z]{40})\.zip$""").matchEntire(url)
         if (matchCommit != null && matchCommit.groups.size > 4) {
             processMatch(matchCommit)
-            // the commit hash is now in the default_branch field - let's leave it at that
             direct_zip_url = url
             return this
         }
 
+        /** Now look for GitHub specific commit links and translate to the respective archive */
+        val matchCommitWithoutArchive = Regex("""^(.*/(.*)/(.*))/commit/([0-9a-z]{40})/?$""").matchEntire(url)
+        if (matchCommitWithoutArchive != null && matchCommitWithoutArchive.groups.size > 4) {
+            processMatch(matchCommitWithoutArchive)
+            direct_zip_url = "$html_url/archive/$default_branch.zip"
+            return this
+        }
+
+        /** Last see if we recognize author/reponame and can query the full repo info for that */
         val matchRepo = Regex("""^.*//.*/(.+)/(.+)/?$""").matchEntire(url)
         if (matchRepo != null && matchRepo.groups.size > 2) {
             // Query API if we got the 'https://github.com/author/repoName' URL format to get the correct default branch
@@ -348,11 +367,12 @@ object GithubAPI {
             if (repo != null) return repo
         }
 
-        // Only complain about invalid link if it isn't a http protocol (to think about: android document protocol? file protocol?)
+        /** Only complain about invalid link if it isn't a http protocol */
+        // (to think about: android document protocol? file protocol?)
         if (!url.startsWith("http://") && !url.startsWith("https://"))
             return null
 
-        // From here, we'll always return success and treat the url as direct-downloadable zip.
+        /** From here, we'll always return success and treat the url as direct-downloadable zip. */
         // The Repo instance will be a pseudo-repo not corresponding to an actual github repo.
         html_url = ""
         direct_zip_url = url
