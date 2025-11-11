@@ -130,18 +130,9 @@ internal class ModInfoAndActionPane : Table() {
             add("Permanent audiovisual mod".toCheckBox(startsOutChecked, changeAction)).row()
     }
 
-    fun addUpdateModButton(modInfo: ModUIData, doDownload: () -> Unit) {
-        if (!modInfo.hasUpdate) return
-        val updateModTextbutton = "Update [${cleanModName(modInfo.name)}]".toTextButton()
-        updateModTextbutton.onClick {
-            updateModTextbutton.setText("Downloading...".tr())
-            doDownload()
-        }
-        add(updateModTextbutton).row()
-    }
-
-    fun addReloadModButton(modInfo: ModUIData): TextButton {
-        val updateModTextbutton = "Re-download [${cleanModName(modInfo.name)}]".toTextButton()
+    fun addUpdateModButton(modInfo: ModUIData, isRedownload: Boolean = false): TextButton {
+        val label = "${ if (isRedownload) "Re-download" else "Update" } [${cleanModName(modInfo.name)}]"
+        val updateModTextbutton = label.toTextButton()
         add(updateModTextbutton).row()
         return updateModTextbutton
     }

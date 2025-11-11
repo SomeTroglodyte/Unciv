@@ -442,14 +442,7 @@ class ModManagementScreen private constructor(
                     actualDownloadButton.enable()
                 }
             } else {
-                downloadMod(repo, { state, progress ->
-                    when (state) {
-                        DownloadAndExtractState.Downloading ->
-                            actualDownloadButton.setText("{Downloading...} {${progress}}%".tr())
-                        DownloadAndExtractState.Extracting ->
-                            actualDownloadButton.setText("Extracting...".tr())
-                    }
-                }) {
+                downloadMod(repo, createDownloadProgressCallback(actualDownloadButton)) {
                     actualDownloadButton.setText(savedText)
                     onSuccess()
                 }
@@ -476,7 +469,7 @@ class ModManagementScreen private constructor(
                                 modActionTable.updateSize(repoSize)
                         }
                     }
-                } catch (ignore: IOException) {
+                } catch (_: IOException) {
                     /* Parsing of mod size failed, do nothing */
                 }
             }
@@ -492,12 +485,7 @@ class ModManagementScreen private constructor(
             rightSideButton.setText("Downloading...".tr())
             rightSideButton.disable()
 
-            downloadMod(repo, { state, progress ->
-                when (state) {
-                    DownloadAndExtractState.Downloading -> rightSideButton.setText("{Downloading...} ${progress}%".tr())
-                    DownloadAndExtractState.Extracting -> rightSideButton.setText("Extracting...".tr())
-                }
-            }) {
+            downloadMod(repo, createDownloadProgressCallback(rightSideButton)) {
                 rightSideButton.setText("Downloaded!".tr())
             }
         }
@@ -549,6 +537,14 @@ class ModManagementScreen private constructor(
             }
         }
     }
+
+    private fun createDownloadProgressCallback(button: TextButton) =
+        fun (state: DownloadAndExtractState, progress: Int?) {
+            when (state) {
+                DownloadAndExtractState.Downloading -> button.setText("{Downloading...} ${progress}%".tr())
+                DownloadAndExtractState.Extracting -> button.setText("Extracting...".tr())
+            }
+        }
 
     /** Our data on the Mod needs refreshing description after download or update */
     private fun updateInstalledModUIData(modName: String) {
@@ -619,14 +615,17 @@ class ModManagementScreen private constructor(
                 refreshInstalledModTable()
         }
 
-        modActionTable.addUpdateModButton(modInfo) {
-            val repo = onlineModInfo[mod.name]!!.repo!!
-            downloadMod(repo) { refreshInstalledModActions(mod) }
+        if (modInfo.hasUpdate) {
+            val button = modActionTable.addUpdateModButton(modInfo)
+            button.onClick {
+                val repo = onlineModInfo[mod.name]!!.repo!!
+                downloadMod(repo, createDownloadProgressCallback(button)) { refreshInstalledModActions(mod) }
+            }
         }
 
         val directUrl = installedModInfo[mod.name]?.ruleset?.modOptions?.directDownloadUrl
         if (directUrl?.isNotEmpty() == true) {
-            val button = modActionTable.addReloadModButton(modInfo)
+            val button = modActionTable.addUpdateModButton(modInfo, isRedownload = true)
             button.onClick {
                 doDirectDownload(button, directUrl) { refreshInstalledModActions(mod) }
             }
