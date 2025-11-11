@@ -210,6 +210,7 @@ object Github {
         // If this is false we didn't get github repo info, do a defensive merge so the Repo.parseUrl or download
         // code can decide defaults but leave any meaningful field of a zip-included ModOptions alone.
         val overwriteAlways = repo.direct_zip_url.isEmpty()
+        modOptions.directDownloadUrl = repo.direct_zip_url
 
         if (overwriteAlways || modOptions.modUrl.isEmpty()) modOptions.modUrl = repo.html_url
         if (overwriteAlways || modOptions.defaultBranch == "master" && repo.default_branch.isNotEmpty())

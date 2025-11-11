@@ -22,6 +22,7 @@ class ModOptions : IHasUniques {
 
     //region Metadata, automatic
     var modUrl = ""
+    var directDownloadUrl = ""
     var defaultBranch = "master"
     var author = ""
     var lastUpdated = ""
