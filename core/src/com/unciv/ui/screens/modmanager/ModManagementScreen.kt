@@ -420,33 +420,41 @@ class ModManagementScreen private constructor(
             popup.add(pasteLinkButton).row()
             val actualDownloadButton = "Download".toTextButton()
             actualDownloadButton.onClick {
-                actualDownloadButton.setText("Downloading...".tr())
-                actualDownloadButton.disable()
-                Concurrency.run {
-                    val repo = GithubAPI.Repo.parseUrl(textField.text)
-                    if (repo == null) {
-                        Concurrency.runOnGLThread {
-                            ToastPopup("«RED»{Invalid link!}«»", this@ModManagementScreen)
-                            actualDownloadButton.setText("Download".tr())
-                            actualDownloadButton.enable()
-                        }
-                    } else {
-                        downloadMod(repo, { state, progress ->
-                            when (state) {
-                                DownloadAndExtractState.Downloading ->
-                                    actualDownloadButton.setText("{Downloading...} ${progress}%".tr())
-                                DownloadAndExtractState.Extracting ->
-                                    actualDownloadButton.setText("Extracting...".tr())
-                            }
-                        }) { popup.close() }
-                    }
-                }
+                doDirectDownload(actualDownloadButton, textField.text) { popup.close() }
             }
             popup.add(actualDownloadButton).row()
             popup.addCloseButton()
             popup.open()
         }
         return downloadButton
+    }
+
+    private fun doDirectDownload(actualDownloadButton: TextButton, directUrl: String, onSuccess: () -> Unit) {
+        val savedText = actualDownloadButton.text.toString()
+        actualDownloadButton.setText("Downloading...".tr())
+        actualDownloadButton.disable()
+        Concurrency.run {
+            val repo = GithubAPI.Repo.parseUrl(directUrl)
+            if (repo == null) {
+                Concurrency.runOnGLThread {
+                    ToastPopup("«RED»{Invalid link!}«»", this@ModManagementScreen)
+                    actualDownloadButton.setText(savedText)
+                    actualDownloadButton.enable()
+                }
+            } else {
+                downloadMod(repo, { state, progress ->
+                    when (state) {
+                        DownloadAndExtractState.Downloading ->
+                            actualDownloadButton.setText("{Downloading...} {${progress}}%".tr())
+                        DownloadAndExtractState.Extracting ->
+                            actualDownloadButton.setText("Extracting...".tr())
+                    }
+                }) {
+                    actualDownloadButton.setText(savedText)
+                    onSuccess()
+                }
+            }
+        }
     }
 
     /** Used as onClick handler for the online Mod list buttons */
@@ -614,6 +622,14 @@ class ModManagementScreen private constructor(
         modActionTable.addUpdateModButton(modInfo) {
             val repo = onlineModInfo[mod.name]!!.repo!!
             downloadMod(repo) { refreshInstalledModActions(mod) }
+        }
+
+        val directUrl = installedModInfo[mod.name]?.ruleset?.modOptions?.directDownloadUrl
+        if (directUrl?.isNotEmpty() == true) {
+            val button = modActionTable.addReloadModButton(modInfo)
+            button.onClick {
+                doDirectDownload(button, directUrl) { refreshInstalledModActions(mod) }
+            }
         }
     }
 

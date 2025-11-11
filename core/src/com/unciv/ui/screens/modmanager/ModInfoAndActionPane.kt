@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.unciv.UncivGame
 import com.unciv.logic.github.Github
 import com.unciv.logic.github.GithubAPI
@@ -137,6 +138,12 @@ internal class ModInfoAndActionPane : Table() {
             doDownload()
         }
         add(updateModTextbutton).row()
+    }
+
+    fun addReloadModButton(modInfo: ModUIData): TextButton {
+        val updateModTextbutton = "Re-download [${cleanModName(modInfo.name)}]".toTextButton()
+        add(updateModTextbutton).row()
+        return updateModTextbutton
     }
 
     private fun addPreviewImage(modName: String, repoUrl: String, defaultBranch: String, avatarUrl: String?) {
