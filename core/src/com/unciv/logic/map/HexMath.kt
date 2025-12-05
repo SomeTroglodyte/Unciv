@@ -213,7 +213,7 @@ object HexMath {
     fun getHexCoordsAtDistance(origin: HexCoord, distance: Int, maxDistance: Int, worldWrap: Boolean): List<HexCoord> {
         val vectors = mutableListOf<HexCoord>()
         if (distance == 0) {
-            return listOf(origin.cpy())
+            return listOf(origin)
         }
         
         @Readonly
@@ -228,13 +228,13 @@ object HexMath {
             current = current.plus(1, 0)
         }
         for (i in 0 until distance) { // 8 to 10
-            vectors += current.cpy()
+            vectors += current
             if (!worldWrap || distance != maxDistance)
                 vectors += getHexcoordOnOtherSideOfClock(current)
             current = current.plus(1, 1)
         }
         for (i in 0 until distance) { // 10 to 12
-            vectors += current.cpy()
+            vectors += current
             if (!worldWrap || distance != maxDistance || i != 0)
                 vectors += getHexcoordOnOtherSideOfClock(current)
             current = current.plus(0, 1)
@@ -377,55 +377,23 @@ object HexMath {
 
 }
 
-//interface HexCoord{
-//    val x: Int
-//    val y: Int
-//    
-//}
-
-/** Required for ser/deser since the stupid json parser can't handle the inline ints -_-  */
-data class HexCoord(val x:Int=0, val y:Int=0){
-
-    @Pure fun plus(hexCoord: HexCoord): HexCoord = HexCoord.of(x + hexCoord.x, y + hexCoord.y)
-    @Pure fun plus(plusX: Int, plusY: Int): HexCoord = HexCoord.of(x + plusX, y + plusY)
-    @Pure fun minus(hexCoord: HexCoord): HexCoord = HexCoord.of(x - hexCoord.x, y - hexCoord.y)
-    @Pure fun times(int: Int): HexCoord = HexCoord.of(x * int, y * int)
-
-    @Pure fun toVector2(): Vector2 = Vector2(x.toFloat(), y.toFloat())
-
-    @Pure fun eq(x:Int,y:Int): Boolean = this.x == x && this.y == y
-
-    // Conversion helpers for 1:1 Vector2 compatibility
-    @Pure fun cpy() = this
-    @Pure fun toHexCoord() = this
-    @Pure fun asSerializable() = HexCoord(x,y)
-
-    fun toPrettyString(): String = "($x,$y)"
-
-    companion object {
-        val Zero = HexCoord.of(0,0)
-        @Pure
-        fun of(x: Int, y: Int): HexCoord = HexCoord(x,y)
-    }
-    /** Ser/deser to be 1:1 with Vector2, to allow us to replace Vector2 in game saves with HexCoord */
-    class Serializer : Json.Serializer<HexCoord> {
-        override fun write(json: Json, coord: HexCoord, knownType: Class<*>?) {
-            json.writeValue(mapOf("x" to coord.x.toFloat(), "y" to coord.y.toFloat()))
-        }
-
-        override fun read(json: Json, jsonData: JsonValue, type: Class<*>?): HexCoord {
-            val x = json.readValue(Float::class.java, jsonData["x"]) ?: 0f
-            val y = json.readValue(Float::class.java, jsonData["y"]) ?: 0f
-            return HexCoord(x.toInt(), y.toInt())
-        }
-    }
-}
-
 @JvmInline
-/** When we need to create a lot of coords we prefer to use this implementation - since it's inline it's passed around as as int
-    and doesn't require memory allocation or memory access */
-value class InlineHexCoord(val coords: Int = 0) {
+/**
+ * One hex coordinate on the map
+ * - since it's inline it's passed around as as int and doesn't require extra memory allocation when used as field or element type
+ * - nor does it need copying when cloning containers
+ * - serialization is handled via setSerializer in UncivJson - Cannot use Json.Serializable since this is immutable
+ * - serialization format is `{"x":2,"y":-3}` - could easily be changed to a shorter representation
+ * @constructor Takes [x] and [y] coords - the internal representation is entirely private
+ */
+value class HexCoord private constructor(private val coords: Int) {
     // x value is stored in the 16 bits, and y value in the bottom 16 bits, allowing range -32768 to 32767
+    constructor(x: Int, y: Int) : this((x shl 16) or (y and 0xFFFF)) {
+        require(x in -32768..32767) { "X value must be in range -32768..32767" }
+        require(y in -32768..32767) { "Y value must be in range -32768..32767" }
+    }
+
+    //constructor() : this(0)
 
     val x: Int
         get() = coords shr 16
@@ -433,19 +401,57 @@ value class InlineHexCoord(val coords: Int = 0) {
     // Extract bottom 16 bits and sign-extend - required to keep negative numbers
     val y: Int
         get() = (coords shl 16) shr 16
-    
+
     override fun toString(): String = "HexCoord(x=${x}, y=${y})"
+
+    @Pure operator fun plus(hexCoord: HexCoord) = of(x + hexCoord.x, y + hexCoord.y)
+    @Pure fun plus(plusX: Int, plusY: Int) = of(x + plusX, y + plusY)
+    @Pure operator fun minus(hexCoord: HexCoord) = of(x - hexCoord.x, y - hexCoord.y)
+    @Pure operator fun times(int: Int) = of(x * int, y * int)
+
+    @Pure fun toVector2() = Vector2(x.toFloat(), y.toFloat())
+
+    @Pure fun eq(x: Int, y: Int) = this.x == x && this.y == y
+
+    // Conversion helpers for 1:1 Vector2 compatibility (obsolete but ubiquitous)
+    @Pure fun toHexCoord() = this
+
+    fun toPrettyString(): String = "($x,$y)"
 
     companion object {
         @Pure
-        fun of(x: Int, y: Int): InlineHexCoord {
-            require(x in -32768..32767) { "X value must be in range -32768..32767" }
-            require(y in -32768..32767) { "Y value must be in range -32768..32767" }
-            return InlineHexCoord((x shl 16) or (y and 0xFFFF))
+        fun of(x: Int, y: Int) = HexCoord(x, y)
+        val Zero = of(0, 0)
+
+        fun writeJson(json: Json, value: HexCoord) {
+            json.writeObjectStart()
+            json.writeValue("x", value.x)
+            json.writeValue("y", value.y)
+            json.writeObjectEnd()
         }
+        fun writeJson(json: Json, name: String, value: HexCoord) {
+            if (value == Zero) return
+            json.writer.name(name)
+            writeJson(json, value)
+        }
+        fun readJson(json: Json, jsonData: JsonValue): HexCoord {
+            val x = json.readValue("x", Float::class.java, 0f, jsonData)
+            val y = json.readValue("y", Float::class.java, 0f, jsonData)
+            return HexCoord(x.toInt(), y.toInt())
+        }
+        fun readJson(json: Json, name: String, jsonData: JsonValue): HexCoord {
+            val coordJson = jsonData[name] ?: return Zero
+            return readJson(json, coordJson)
+        }
+    }
+
+    /** Ser/deser to be 1:1 with Vector2, to allow us to replace Vector2 in game saves with HexCoord */
+    class Serializer : Json.Serializer<HexCoord> {
+        override fun write(json: Json, value: HexCoord, knownType: Class<*>?) =
+            writeJson(json, value)
+        override fun read(json: Json, jsonData: JsonValue, type: Class<*>?) =
+            readJson(json, jsonData)
     }
 }
 
 @Pure fun Vector2.toHexCoord() = HexCoord.of(this.x.toInt(), this.y.toInt())
-@Pure fun Vector2.toVector2() = this // compatibility
-@Pure fun Vector2.asSerializable() = HexCoord(x.toInt(),y.toInt())

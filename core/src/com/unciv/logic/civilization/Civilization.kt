@@ -219,15 +219,13 @@ class Civilization : IsPartOfGameInfoSerialization {
      * @property target Position of the tile targeted by the attack.
      * @see [MapUnit.UnitMovementMemory], [attacksSinceTurnStart]
      */
-    class HistoricalAttackMemory() : IsPartOfGameInfoSerialization {
-        constructor(attackingUnit: String?, source: HexCoord, target: HexCoord): this() {
-            this.attackingUnit = attackingUnit
-            this.source = source
-            this.target = target
-        }
-        var attackingUnit: String? = null
-        lateinit var source: HexCoord
-        lateinit var target: HexCoord
+    class HistoricalAttackMemory(
+        var attackingUnit: String? = null,
+        var source: HexCoord,
+        var target: HexCoord
+    ) : IsPartOfGameInfoSerialization {
+        @Suppress("unused") // json deserialization
+        constructor(): this(null, HexCoord.Zero, HexCoord.Zero)
         @Readonly fun clone() = HistoricalAttackMemory(attackingUnit, source, target)
     }
     /** Deep clone an ArrayList of [HistoricalAttackMemory]s. */

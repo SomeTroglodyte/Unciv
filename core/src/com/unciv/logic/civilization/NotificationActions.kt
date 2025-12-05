@@ -53,8 +53,12 @@ class LocationAction(private val location: HexCoord = HexCoord.Zero) : Notificat
     companion object {
         operator fun invoke(locations: Sequence<HexCoord>): Sequence<LocationAction> =
             locations.map { LocationAction(it) }
-        operator fun invoke(vararg locations: HexCoord?): Sequence<LocationAction> =
-            locations.asSequence().filterNotNull().map { LocationAction(it) }
+        operator fun invoke(location1: HexCoord?): Sequence<LocationAction> =
+            listOfNotNull(location1).asSequence().map { LocationAction(it) }
+        operator fun invoke(location1: HexCoord?, location2: HexCoord?): Sequence<LocationAction> =
+            listOfNotNull(location1, location2).asSequence().map { LocationAction(it) }
+        operator fun invoke(location1: HexCoord?, location2: HexCoord?, location3: HexCoord?): Sequence<LocationAction> =
+            listOfNotNull(location1, location2, location3).asSequence().map { LocationAction(it) }
     }
 }
 
