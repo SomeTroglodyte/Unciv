@@ -77,6 +77,7 @@ class TileHistory(
 
     override fun read(json: Json, jsonData: JsonValue) {
         for (entry in jsonData) {
+            if (entry.name == "class") continue
             val turn = entry.name.toInt()
             val owningCivName =
                 (if (entry[0].isString) entry.getString(0) else "").takeUnless { it.isEmpty() }

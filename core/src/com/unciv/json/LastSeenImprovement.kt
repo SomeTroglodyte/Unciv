@@ -27,6 +27,7 @@ class LastSeenImprovement(
 
     override fun read(json: Json, jsonData: JsonValue) {
         for (entry in jsonData) {
+            if (entry.name == "class") continue
             val key = entry.name.toHexCoord()
             val value = if (entry.isValue) entry.asString() else entry.getString("value")
             put(key, value)

@@ -30,7 +30,6 @@ class CivRankingHistory : HashMap<Int, Map<RankingType, Int>>(), IsPartOfGameInf
      */
     override fun write(json: Json) {
         for ((turn, rankings) in this) {
-
             val rankingsString = rankings.entries
                 .joinToString("") { it.key.idForSerialization.toString() + it.value }
             json.writeValue(turn.toString(), rankingsString)
@@ -40,6 +39,7 @@ class CivRankingHistory : HashMap<Int, Map<RankingType, Int>>(), IsPartOfGameInf
     private val nonNumber = Regex("[^\\d-]") // Rankings can be negative, so we can't just \D :(
     override fun read(json: Json, jsonData: JsonValue) {
         for (entry in jsonData) {
+            if (entry.name == "class") continue
             val turn = entry.name.toInt()
             val rankings = mutableMapOf<RankingType, Int>()
 

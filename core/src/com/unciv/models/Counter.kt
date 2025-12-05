@@ -88,6 +88,7 @@ open class Counter<K>(
 
     override fun read(json: Json, jsonData: JsonValue) {
         for (entry in jsonData) {
+            if (entry.name == "class") continue
             @Suppress("UNCHECKED_CAST")
             // Default Gdx does the same. If K is NOT String, then Gdx would still store String keys. And we can't reify K to check..
             val key = entry.name as K
