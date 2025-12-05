@@ -1176,21 +1176,11 @@ class Tile : IsPartOfGameInfoSerialization, Json.Serializable {
     override fun write(json: Json) {
         HexCoord.writeJson(json, "position", position)
         json.writeFields(this)
-        // Compatibility code for the case an improvementQueue-using game is loaded by an older version: Write fake fields
-        if (improvementInProgress != null) json.writeValue("improvementInProgress", improvementInProgress, String::class.java)
-        if (turnsToImprovement != 0) json.writeValue("turnsToImprovement", turnsToImprovement, Int::class.java)
     }
 
     override fun read(json: Json, jsonData: JsonValue) {
         position = HexCoord.readJson(json, "position", jsonData)
         json.readFields(this, jsonData)
-        // Compatibility code for the case an pre-improvementQueue game is loaded by this version: Read legacy fields
-        if (improvementQueue.isEmpty() && jsonData.get("improvementQueue") == null) {
-            val improvementInProgress = jsonData.getString("improvementInProgress", "")
-            val turnsToImprovement = jsonData.getInt("turnsToImprovement", 0)
-            if (improvementInProgress.isNotEmpty() && turnsToImprovement != 0)
-                improvementQueue.add(ImprovementQueueEntry(improvementInProgress, turnsToImprovement))
-        }
     }
 
     //endregion
