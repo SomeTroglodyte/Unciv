@@ -46,7 +46,9 @@ class Tile : IsPartOfGameInfoSerialization, Json.Serializable {
     var civilianUnit: MapUnit? = null
     var airUnits = ArrayList<MapUnit>(0)
 
-    var position = HexCoord()
+    @Transient // Fake! It is serialized manually, this only hides the field from Gdx's json
+    var position = HexCoord.Zero
+
     lateinit var baseTerrain: String
     var terrainFeatures: List<String> = listOf()
         private set
@@ -1172,6 +1174,7 @@ class Tile : IsPartOfGameInfoSerialization, Json.Serializable {
     }
 
     override fun write(json: Json) {
+        HexCoord.writeJson(json, "position", position)
         json.writeFields(this)
         // Compatibility code for the case an improvementQueue-using game is loaded by an older version: Write fake fields
         if (improvementInProgress != null) json.writeValue("improvementInProgress", improvementInProgress, String::class.java)
@@ -1179,6 +1182,7 @@ class Tile : IsPartOfGameInfoSerialization, Json.Serializable {
     }
 
     override fun read(json: Json, jsonData: JsonValue) {
+        position = HexCoord.readJson(json, "position", jsonData)
         json.readFields(this, jsonData)
         // Compatibility code for the case an pre-improvementQueue game is loaded by this version: Read legacy fields
         if (improvementQueue.isEmpty() && jsonData.get("improvementQueue") == null) {

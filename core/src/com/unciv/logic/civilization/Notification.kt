@@ -115,7 +115,10 @@ class Notification() : IsPartOfGameInfoSerialization, Json.Serializable {
         for (action in actions) {
             json.writeObjectStart()
             json.writeObjectStart(action::class.java.simpleName)
-            json.writeFields(action)
+            if (action is Json.Serializable)
+                action.write(json)
+            else
+                json.writeFields(action)
             json.writeObjectEnd()
             json.writeObjectEnd()
         }

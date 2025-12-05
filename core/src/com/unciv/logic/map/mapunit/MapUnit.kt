@@ -1,5 +1,7 @@
 package com.unciv.logic.map.mapunit
 
+import com.badlogic.gdx.utils.Json
+import com.badlogic.gdx.utils.JsonValue
 import com.unciv.Constants
 import com.unciv.logic.IsPartOfGameInfoSerialization
 import com.unciv.logic.MultiFilter
@@ -173,12 +175,24 @@ class MapUnit : IsPartOfGameInfoSerialization {
      * @property type Category of the last change in position that brought the unit to this position.
      * @see [movementMemories]
      * */
-    class UnitMovementMemory(val position: HexCoord, val type: UnitMovementMemoryType) : IsPartOfGameInfoSerialization {
+    class UnitMovementMemory(
+        var position: HexCoord,
+        val type: UnitMovementMemoryType
+    ) : IsPartOfGameInfoSerialization, Json.Serializable {
         @Suppress("unused") // needed because this is part of a save and gets deserialized
         constructor() : this(HexCoord.Zero, UnitMovementMemoryType.UnitMoved)
 
         @Readonly fun clone() = UnitMovementMemory(position, type)
         override fun toString() = "${this::class.simpleName}($position, $type)"
+
+        override fun write(json: Json) {
+            HexCoord.writeJson(json, "position", position)
+            json.writeField(this, "type")
+        }
+        override fun read(json: Json, jsonData: JsonValue) {
+            position = HexCoord.readJson(json, "position", jsonData)
+            json.readField(this, "type", jsonData)
+        }
     }
 
     //region pure functions

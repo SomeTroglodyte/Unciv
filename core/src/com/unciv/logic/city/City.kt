@@ -1,5 +1,7 @@
 package com.unciv.logic.city
 
+import com.badlogic.gdx.utils.Json
+import com.badlogic.gdx.utils.JsonValue
 import com.unciv.Constants
 import com.unciv.GUI
 import com.unciv.logic.IsPartOfGameInfoSerialization
@@ -42,7 +44,7 @@ enum class CityFlags {
 }
 
 
-class City : IsPartOfGameInfoSerialization, INamed {
+class City : IsPartOfGameInfoSerialization, INamed, Json.Serializable {
     @Transient
     lateinit var civ: Civilization
 
@@ -61,7 +63,9 @@ class City : IsPartOfGameInfoSerialization, INamed {
     // This is so that military units can enter the city, even before we decide what to do with it
     var hasJustBeenConquered = false
 
+    @Transient // Fake! It is serialized manually, this only hides the field from Gdx's json
     var location = HexCoord.Zero
+
     var id: String = UUID.randomUUID().toString()
     override var name: String = ""
     /** Serialization field for [foundingCivObject]. Is equivalent to `foundingCivObject.civName` */
@@ -575,4 +579,13 @@ class City : IsPartOfGameInfoSerialization, INamed {
     }
 
     //endregion
+
+    override fun write(json: Json) {
+        HexCoord.writeJson(json, "location", location)
+        json.writeFields(this)
+    }
+    override fun read(json: Json, jsonData: JsonValue) {
+        location = HexCoord.readJson(json, "location", jsonData)
+        json.readFields(this, jsonData)
+    }
 }

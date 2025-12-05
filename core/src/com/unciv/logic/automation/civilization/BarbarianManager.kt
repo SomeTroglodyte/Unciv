@@ -1,5 +1,7 @@
 package com.unciv.logic.automation.civilization
 
+import com.badlogic.gdx.utils.Json
+import com.badlogic.gdx.utils.JsonValue
 import com.unciv.Constants
 import com.unciv.logic.GameInfo
 import com.unciv.logic.IsPartOfGameInfoSerialization
@@ -165,8 +167,10 @@ class BarbarianManager : IsPartOfGameInfoSerialization {
     }
 }
 
-class Encampment() : IsPartOfGameInfoSerialization {
-    var position = HexCoord()
+class Encampment() : IsPartOfGameInfoSerialization, Json.Serializable {
+    @Transient // Fake! It is serialized manually, this only hides the field from Gdx's json
+    var position = HexCoord.Zero
+
     var countdown = 0
     var spawnedUnits = -1
     var destroyed = false // destroyed encampments haunt the vicinity for 15 turns preventing new spawns
@@ -246,7 +250,7 @@ class Encampment() : IsPartOfGameInfoSerialization {
         val spawnedUnit = gameInfo.tileMap.placeUnitNearTile(position.toHexCoord(), unitToSpawn, gameInfo.getBarbarianCivilization())
         return (spawnedUnit != null)
     }
-    
+
     private fun updateBarbarianTech(){
         val barbarianCiv = gameInfo.getBarbarianCivilization()
         val allResearchedTechs = gameInfo.ruleset.technologies.keys.toMutableList()
@@ -290,5 +294,14 @@ class Encampment() : IsPartOfGameInfoSerialization {
         countdown -= min(3, spawnedUnits)
 
         countdown = (countdown * gameInfo.speed.barbarianModifier).toInt()
+    }
+
+    override fun write(json: Json) {
+        HexCoord.writeJson(json, "position", position)
+        json.writeFields(this)
+    }
+    override fun read(json: Json, jsonData: JsonValue) {
+        position = HexCoord.readJson(json, "position", jsonData)
+        json.readFields(this, jsonData)
     }
 }

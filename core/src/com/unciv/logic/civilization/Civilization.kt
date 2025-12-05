@@ -1,5 +1,7 @@
 package com.unciv.logic.civilization
 
+import com.badlogic.gdx.utils.Json
+import com.badlogic.gdx.utils.JsonValue
 import com.unciv.Constants
 import com.unciv.UncivGame
 import com.unciv.json.LastSeenImprovement
@@ -223,10 +225,21 @@ class Civilization : IsPartOfGameInfoSerialization {
         var attackingUnit: String? = null,
         var source: HexCoord,
         var target: HexCoord
-    ) : IsPartOfGameInfoSerialization {
+    ) : IsPartOfGameInfoSerialization, Json.Serializable {
         @Suppress("unused") // json deserialization
         constructor(): this(null, HexCoord.Zero, HexCoord.Zero)
         @Readonly fun clone() = HistoricalAttackMemory(attackingUnit, source, target)
+
+        override fun write(json: Json) {
+            json.writeField(this, "attackingUnit")
+            HexCoord.writeJson(json, "source", source)
+            HexCoord.writeJson(json, "target", target)
+        }
+        override fun read(json: Json, jsonData: JsonValue) {
+            json.readField(this, "attackingUnit", jsonData)
+            source = HexCoord.readJson(json, "source", jsonData)
+            target = HexCoord.readJson(json, "target", jsonData)
+        }
     }
     /** Deep clone an ArrayList of [HistoricalAttackMemory]s. */
     @Readonly private fun ArrayList<HistoricalAttackMemory>.copy() = ArrayList(this.map { it.clone() })

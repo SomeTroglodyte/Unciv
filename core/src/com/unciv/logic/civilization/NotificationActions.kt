@@ -36,9 +36,21 @@ interface NotificationAction : IsPartOfGameInfoSerialization {
 }
 
 /** A notification action that shows map places. */
-class LocationAction(private val location: HexCoord = HexCoord.Zero) : NotificationAction {
+open class LocationAction(
+    /** [location] is only transient here so subclasses can use writeFields and readFields */
+    @Transient protected var location: HexCoord
+) : NotificationAction, Json.Serializable {
+    constructor() : this(HexCoord.Zero)
+
     override fun execute(worldScreen: WorldScreen) {
         worldScreen.mapHolder.setCenterPosition(location, selectUnit = false)
+    }
+
+    override fun write(json: Json) {
+        HexCoord.writeJson(json, "location", location)
+    }
+    override fun read(json: Json, jsonData: JsonValue) {
+        location = HexCoord.readJson(json, "location", jsonData)
     }
 
     /**
@@ -71,15 +83,28 @@ class TechAction(private val techName: String = "") : NotificationAction {
 }
 
 /** enter city */
-class CityAction(private val city: HexCoord = HexCoord.Zero) : NotificationAction {
+class CityAction(
+    private var city: HexCoord
+) : NotificationAction, Json.Serializable {
+    @Suppress("unused")
+    constructor() : this(HexCoord.Zero)
+
     override fun execute(worldScreen: WorldScreen) {
         val cityObject = worldScreen.mapHolder.tileMap[city].getCity()
             ?: return
         if (cityObject.civ == worldScreen.viewingCiv)
             worldScreen.game.pushScreen(CityScreen(cityObject))
     }
+
+    override fun write(json: Json) {
+        HexCoord.writeJson(json, "city", city)
+    }
+    override fun read(json: Json, jsonData: JsonValue) {
+        city = HexCoord.readJson(json, "city", jsonData)
+    }
+
     companion object {
-        fun withLocation(city: City) = listOf(LocationAction(city.location), CityAction(city.location))
+        fun withLocation(city: City): List<NotificationAction> = listOf(LocationAction(city.location), CityAction(city.location))
     }
 }
 
@@ -140,16 +165,29 @@ class MayaLongCountAction : NotificationAction {
  *  Activation without unit id also works for cities, selecting them - so a bombard is one click less.
  */
 class MapUnitAction(
-    private val location: HexCoord = HexCoord.Zero,
-    private val id: Int = Constants.NO_ID
-) : NotificationAction {
+    location: HexCoord,
+    private val id: Int
+) : LocationAction(location) {
+    constructor() : this(HexCoord.Zero, Constants.NO_ID)
     constructor(unit: MapUnit) : this(unit.currentTile.position.toHexCoord(), unit.id)
+    constructor(location: HexCoord) : this(location, Constants.NO_ID) // Used for cities that can bombard
+
     override fun execute(worldScreen: WorldScreen) {
         val selectUnit = id != Constants.NO_ID  // This is the unspecific "select any unit on that tile", specific works without this being on
         val unit = if (selectUnit) null else
             worldScreen.gameInfo.tileMap[location].getUnits().firstOrNull { it.id == id }
         worldScreen.mapHolder.setCenterPosition(location.toHexCoord(), selectUnit = selectUnit, forceSelectUnit = unit)
     }
+
+    override fun write(json: Json) {
+        super.write(json)
+        json.writeFields(this)
+    }
+    override fun read(json: Json, jsonData: JsonValue) {
+        super.read(json, jsonData)
+        json.readFields(this, jsonData)
+    }
+
     companion object {
         // Convenience shortcut as it makes replacing LocationAction calls easier (see above)
         operator fun invoke(units: Iterable<MapUnit>): Sequence<MapUnitAction> =
@@ -164,13 +202,32 @@ class CivilopediaAction(private val link: String = "") : NotificationAction {
     }
 }
 
-/** Show Promotion picker for a MapUnit - by name and location, as they lack a serialized unique ID */
-class PromoteUnitAction(private val name: String = "", private val location: HexCoord = HexCoord.Zero) : NotificationAction {
+/** Show Promotion picker for a MapUnit - by name and location, as they lack a serialized unique ID
+ *  TODO that's no longer true - migration with backward compat is in order - this implements the first step
+ */
+class PromoteUnitAction(
+    private val name: String,
+    location: HexCoord
+    private val id: Int
+) : LocationAction(location) {
+    @Suppress("unused")
+    constructor() : this("", HexCoord.Zero)
+    constructor(unit: MapUnit) : this(unit.name, unit.currentTile.position)
+
     override fun execute(worldScreen: WorldScreen) {
         val tile = worldScreen.gameInfo.tileMap[location]
         val unit = tile.militaryUnit?.takeIf { it.name == name && it.civ == worldScreen.selectedCiv }
             ?: return
         worldScreen.game.pushScreen(PromotionPickerScreen(unit))
+    }
+
+    override fun write(json: Json) {
+        super.write(json)
+        json.writeFields(this)
+    }
+    override fun read(json: Json, jsonData: JsonValue) {
+        super.read(json, jsonData)
+        json.readFields(this, jsonData)
     }
 }
 
