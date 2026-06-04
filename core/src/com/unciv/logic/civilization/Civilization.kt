@@ -254,6 +254,9 @@ class Civilization : IsPartOfGameInfoSerialization {
 
     var statsHistory = CivRankingHistory()
 
+    /** Incremented by a city-state [QuestManager], for recording in [CivRankingHistory] */
+    var questsWon = 0
+
     constructor()
 
     constructor(civName: String) {
@@ -326,6 +329,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.hasMovedAutomatedUnits = hasMovedAutomatedUnits
         toReturn.statsHistory = statsHistory.clone()
         toReturn.resourceStockpiles = resourceStockpiles.clone()
+        toReturn.questsWon = questsWon
         return toReturn
     }
 
@@ -835,18 +839,31 @@ class Civilization : IsPartOfGameInfoSerialization {
 
     @Readonly
     fun getStatForRanking(category: RankingType): Int {
+        fun City.wondersBuilt() = cityConstructions.getBuiltBuildings().count { it.isAnyWonder() }
         return if (isDefeated()) 0
         else when (category) {
-                RankingType.Score -> calculateTotalScore().toInt()
-                RankingType.Population -> cities.sumOf { it.population.population }
-                RankingType.Growth -> stats.statsForNextTurn.food.roundToInt()
-                RankingType.Production -> stats.statsForNextTurn.production.roundToInt()
-                RankingType.Gold -> gold
-                RankingType.Territory -> cities.sumOf { it.tiles.size }
-                RankingType.Force -> getMilitaryMight()
-                RankingType.Happiness -> getHappiness()
-                RankingType.Technologies -> tech.researchedTechnologies.size
-                RankingType.Culture -> policies.adoptedPolicies.count { !Policy.isBranchCompleteByName(it) }
+            RankingType.Score -> calculateTotalScore().toInt()
+            RankingType.Population -> cities.sumOf { it.population.population }
+            RankingType.Growth -> stats.statsForNextTurn.food.roundToInt()
+            RankingType.Production -> stats.statsForNextTurn.production.roundToInt()
+            RankingType.Gold -> gold
+            RankingType.Territory -> cities.sumOf { it.tiles.size }
+            RankingType.Force -> getMilitaryMight()
+            RankingType.Happiness -> getHappiness()
+            RankingType.Technologies -> tech.researchedTechnologies.size
+            RankingType.Culture -> policies.adoptedPolicies.count { !Policy.isBranchCompleteByName(it) }
+            RankingType.Faith -> religionManager.storedFaith
+            RankingType.GoldIncome -> stats.statsForNextTurn.gold.roundToInt()
+            RankingType.CultureIncome -> stats.statsForNextTurn.culture.roundToInt()
+            RankingType.FaithIncome -> stats.statsForNextTurn.faith.roundToInt()
+            RankingType.ScienceIncome -> stats.statsForNextTurn.science.roundToInt()
+            RankingType.QuestsWon -> questsWon
+            RankingType.WondersBuilt -> cities.sumOf { it.wondersBuilt() }
+            RankingType.Cities -> cities.size
+            RankingType.Military -> units.getCivUnits().count { it.isMilitary() }
+            RankingType.Civilians -> units.getCivUnits().count { it.isCivilian() }
+            RankingType.ReligionCities -> religionManager.numberOfCitiesFollowingThisReligion()
+            RankingType.ReligionFollowers -> religionManager.numberOfFollowersFollowingThisReligion("in all cities")
         }
     }
 

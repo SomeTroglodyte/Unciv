@@ -390,6 +390,9 @@ class QuestManager : IsPartOfGameInfoSerialization {
         // We may have received bonuses from city-state friend-ness or ally-ness
         for (city in civ.cities)
             city.cityStats.update()
+
+        // For ranking history
+        assignee.questsWon++
     }
 
     /** Notifies the assignee of [assignedQuest] that the quest is now obsolete or expired.
