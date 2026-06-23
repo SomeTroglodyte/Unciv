@@ -306,6 +306,46 @@ open class UncivTooltip <T: Actor>(
             ))
         }
 
+        /**
+         * Add an [Actor]-based Tooltip with a rounded-corner background to a [Table] or other [Group].
+         *
+         * Removes any previous tooltips.
+         * By default, the Tip is positioned below the target, left-aligned, wider tip [Actor]s will extend to the right.
+         *
+         * @param actor Content to wrap and display
+         * @param backgroundHPad Horizontal background padding, do not reduce or the ninepatch's rounded corners may glitch
+         * @param targetAlign   Point on the [target] widget to align the Tooltip to
+         * @param tipAlign      Point on the Tooltip to align with the given point on the [target]
+         * @param offset        Additional offset for Tooltip position after alignment
+         * @param forceContentSize  Force virtual [content] width/height for alignment calculation
+         */
+        fun Actor.addTooltip(
+            actor: Actor,
+            backgroundHPad: Float = 6f,
+            backgroundVPad: Float = 2f,
+            targetAlign: Int = Align.bottomLeft,
+            tipAlign: Int = Align.topLeft,
+            offset: Vector2 = Vector2.Zero,
+            forceContentSize: Vector2? = null
+        ) {
+            removeTooltips()
+
+            val background = getBackground()
+            background.setPadding(backgroundVPad, backgroundHPad, backgroundVPad, backgroundHPad)
+            val actorWithBackground = Container(actor).apply {
+                setBackground(background)
+                isTransform = true  // otherwise setScale is ignored
+            }
+
+            addListener(UncivTooltip(this,
+                actorWithBackground,
+                targetAlign = targetAlign,
+                tipAlign = tipAlign,
+                forceContentSize = forceContentSize,
+                offset = offset
+            ))
+        }
+
         /** Get the background ninepatch appropriate for tooltips */
         fun getBackground() = BaseScreen.skinStrings.getUiBackground("General/Tooltip", BaseScreen.skinStrings.roundedEdgeRectangleShape, Color.LIGHT_GRAY)
 
