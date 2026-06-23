@@ -361,7 +361,7 @@ class UncivFiles(
         try {
             return json().fromJsonFile(Array<ModUIData>::class.java, file).asIterable()
         }
-        catch (ex: Exception){ // Not a huge deal if this fails
+        catch (ex: Exception) { // Not a huge deal if this fails
             Log.error("Error loading mod cache", ex)
             return emptyList()
         }
