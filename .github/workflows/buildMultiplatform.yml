@@ -20,7 +20,7 @@ jobs:
       matrix:
         java_version:
           - 21
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Build Android (Java ${{ matrix.java_version }})
     steps:
       - uses: actions/checkout@v5
@@ -69,7 +69,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-26.04
           - macos-latest
           - windows-latest
         java_version:

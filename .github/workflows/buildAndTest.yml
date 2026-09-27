@@ -15,7 +15,7 @@ jobs:
 
   code-checks:
     name: Check code and run unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v5
 

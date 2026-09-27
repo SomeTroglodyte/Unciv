@@ -17,7 +17,7 @@ env:
 
 jobs:
   get-release-body:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     outputs:
       release_body: ${{ steps.read_release.outputs.release_body }}
@@ -46,7 +46,7 @@ jobs:
 
 
   build-jar:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: get-release-body
     steps:
       - uses: actions/checkout@v5
@@ -110,7 +110,7 @@ jobs:
 
   android-build:
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: get-release-body
     steps:
       - uses: actions/checkout@v5
@@ -190,7 +190,7 @@ jobs:
 
 
   packr-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build-jar
     steps:
       - uses: actions/checkout@v5
@@ -271,7 +271,7 @@ jobs:
           if-no-files-found: error
 
   upload-to-itch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [packr-build]
     continue-on-error: true
     steps:
@@ -294,7 +294,7 @@ jobs:
 
   upload-github-release-and-post-to-discord:
     needs: [get-release-body, android-build, packr-build, build-msi]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
 
       - name: Download all artifacts
@@ -351,7 +351,7 @@ jobs:
 
   AUR-update:
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [get-release-body, upload-github-release-and-post-to-discord]
     steps:
 
@@ -378,7 +378,7 @@ jobs:
           
   brew-update:
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [ get-release-body, upload-github-release-and-post-to-discord ]
     steps:
       - name: Update Homebrew formula

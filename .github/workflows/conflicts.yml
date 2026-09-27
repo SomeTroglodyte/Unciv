@@ -10,7 +10,7 @@ on:
 
 jobs:
   main:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: check conflicting PRs
         uses: eps1lon/actions-label-merge-conflict@releases/2.x
