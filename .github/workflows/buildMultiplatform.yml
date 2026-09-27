@@ -3,12 +3,12 @@ name: Build Multiplatform
 
 
 on:
+  workflow_dispatch:
   push:
     # This is an expensive run, and we don't need it on *every single* push.
     # Once when deploying a version is a good compromise.
     tags:
       - '*'
-  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
