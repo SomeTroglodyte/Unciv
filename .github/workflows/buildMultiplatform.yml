@@ -8,6 +8,7 @@ on:
     # Once when deploying a version is a good compromise.
     tags:
       - '*'
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
