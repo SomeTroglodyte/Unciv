@@ -71,6 +71,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
     var selectedQueueEntry = -1 // None
 
     private val cityView get() = cityScreen.cityView
+    private val settings get() = cityScreen.game.settings
 
     private val upperTable = Table(BaseScreen.skin)
     private val constructionsQueueScrollPane: ScrollPane
@@ -215,11 +216,11 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         else
             constructionsQueueTable.add("Pick a construction".toLabel()).height(50f).pad(2f).row()
 
-        if (UncivGame.Current.settings.hintCityProduction) {
+        if (settings.hintCityProduction && !settings.autoAssignCityProduction) {
             val hintConstruction = cityConstructions.getHintNextConstruction()
             if (hintConstruction != null && hintConstruction != currentConstruction) {
-                constructionsQueueTable.add("[${"Hint".tr()}: ${hintConstruction.tr(true)}]".toLabel())
-                    .pad(4f).padLeft(10f).expandX().fillX().row()
+                val label = "Suggestion: [$hintConstruction]".toLabel().apply { setAlignment(Align.center) }
+                constructionsQueueTable.add(label).pad(4f).growX().row()
             }
         }
 
@@ -682,7 +683,7 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
             cityScreen.clearSelection()
         if (cityView.constructions.constructionQueue.first() == construction.name)
             cityView.tryReassignPopulation()
-        cityScreen.game.settings.addCompletedTutorialTask("Pick construction")
+        settings.addCompletedTutorialTask("Pick construction")
     }
 
     private fun getConstructionSound(construction: IConstruction): UncivSound {
