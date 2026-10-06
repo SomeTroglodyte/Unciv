@@ -30,7 +30,7 @@ class CityConstructionsView(private val cityConstructions: CityConstructions, ga
     @Readonly fun shouldBeDisplayed(construction: IConstruction): Boolean = construction.shouldBeDisplayed(cityConstructions)
     @Readonly fun getRejectionReasons(construction: INonPerpetualConstruction): Sequence<RejectionReason> = construction.getRejectionReasons(cityConstructions)
     @Readonly fun isBuildable(construction: IConstruction): Boolean = construction.isBuildable(cityConstructions)
-    
+
     @Readonly fun canPlaceCreateOneImprovementOn(improvement: TileImprovement, tileView: TileView): Boolean =
         cityConstructions.canPlaceCreateOneImprovementOn(improvement, tileView.unwrap())
     @Readonly fun getTileForImprovement(improvementName: String): TileView? =
@@ -40,7 +40,7 @@ class CityConstructionsView(private val cityConstructions: CityConstructions, ga
     @Readonly fun isBeingConstructedOrEnqueued(name: String): Boolean = cityConstructions.isBeingConstructedOrEnqueued(name)
     @Readonly fun canAddToQueue(construction: IConstruction): Boolean = cityConstructions.canAddToQueue(construction)
     @Readonly fun isEnqueuedForLater(name: String): Boolean = cityConstructions.isEnqueuedForLater(name)
-    
+
     @Readonly fun getCurrentConstruction(): IConstruction = cityConstructions.getCurrentConstruction()
     @Readonly fun getStatBuyCost(construction: INonPerpetualConstruction, stat: Stat): Int? =
         construction.getStatBuyCost(cityConstructions.city, stat)
@@ -48,11 +48,6 @@ class CityConstructionsView(private val cityConstructions: CityConstructions, ga
         cityConstructions.isConstructionPurchaseAllowed(construction, stat, cost)
     @Readonly fun isConstructionPurchaseBlockedByUnit(construction: INonPerpetualConstruction): Boolean =
         cityConstructions.isConstructionPurchaseBlockedByUnit(construction)
-
-    fun purchaseConstruction(construction: INonPerpetualConstruction, queuePosition: Int, automatic: Boolean, stat: Stat, tile: Tile?): Boolean =
-        cityConstructions.purchaseConstruction(construction, queuePosition, automatic, stat, tile)
-    // I'm not convinced this is required, I think the usage should move to the logic rather than the view
-    fun chooseNextConstruction() = cityConstructions.chooseNextConstruction()
 
     fun getHintNextConstruction(): String? = cityConstructions.getHintNextConstruction()
 
