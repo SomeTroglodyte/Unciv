@@ -12,10 +12,12 @@ import com.unciv.logic.map.mapgenerator.MapResourceSetting
 import com.unciv.models.metadata.GameParameters
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.unique.GameContext
+import com.unciv.models.translations.tr
 import com.unciv.ui.components.extensions.*
 import com.unciv.ui.components.input.onChange
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.*
+import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.victoryscreen.LoadMapPreview
 import com.unciv.utils.Concurrency
@@ -60,7 +62,8 @@ class MapParametersTable(
     private lateinit var mapSizesOptionsValues: HashSet<String>
     private lateinit var mapResourcesOptionsValues: HashSet<String>
 
-    private val maxMapSize = ((previousScreen as? NewGameScreen)?.getColumnWidth() ?: 200f) - 10f // There is 5px padding each side
+    // Preview is shrunk to 65% of column width so Width/Height fields and warnings below stay visible without scrolling
+    private val maxMapSize = (((previousScreen as? NewGameScreen)?.getColumnWidth() ?: 200f) - 10f) * 0.65f
     private val mapTypeExample = Table()
     private var exampleMapJob: Job? = null
     @Volatile
@@ -267,8 +270,8 @@ class MapParametersTable(
     private fun updateHexagonalWarnings() {
         val tiles = HexMath.getNumberOfTilesInHexagon(customMapSizeRadius.intValue ?: 0)
         hexWarningLabel.isVisible = tiles >= LARGE_MAP_TILES
-        if (tiles >= VERY_LARGE_MAP_TILES) hexWarningLabel.setText(VERY_LARGE_MAP_WARNING)
-        else hexWarningLabel.setText(LARGE_MAP_WARNING)
+        if (tiles >= VERY_LARGE_MAP_TILES) hexWarningLabel.setText(VERY_LARGE_MAP_WARNING.tr())
+        else hexWarningLabel.setText(LARGE_MAP_WARNING.tr())
     }
 
     private fun addRectangularSizeTable() {
@@ -300,8 +303,8 @@ class MapParametersTable(
     private fun updateRectangularWarnings() {
         val tiles = (customMapWidth.intValue ?: 0) * (customMapHeight.intValue ?: 0)
         rectWarningLabel.isVisible = tiles >= LARGE_MAP_TILES
-        if (tiles >= VERY_LARGE_MAP_TILES) rectWarningLabel.setText(VERY_LARGE_MAP_WARNING)
-        else rectWarningLabel.setText(LARGE_MAP_WARNING)
+        if (tiles >= VERY_LARGE_MAP_TILES) rectWarningLabel.setText(VERY_LARGE_MAP_WARNING.tr())
+        else rectWarningLabel.setText(LARGE_MAP_WARNING.tr())
     }
 
     private fun updateWorldSizeTable() {
@@ -409,7 +412,9 @@ class MapParametersTable(
     private fun addWrappedCheckBoxes() {
         val worldWrapWarning = "World wrap maps are very memory intensive - creating large world wrap maps on Android can lead to crashes!"
         if (mapGeneratedMainType == MapGeneratedMainType.randomGenerated) {
-            add(ExpanderTab("{Other Settings}", persistenceID = "NewGameOtherSettings", startsOutOpened = false) {
+            add(ExpanderTab("{Other Settings}",
+                icon = ImageGetter.getImage("OtherIcons/Settings").apply { setSize(20f, 20f) },
+                persistenceID = "NewGameOtherSettings", startsOutOpened = false) {
                 it.defaults().pad(5f,0f)
                 it.addStrategicBalanceCheckbox()
                 it.addLegendaryStartCheckbox()
@@ -432,7 +437,9 @@ class MapParametersTable(
     }
 
     private fun addAdvancedSettings() {
-        val expander = ExpanderTab("Advanced Settings", startsOutOpened = false, defaultPad = 0f) {
+        val expander = ExpanderTab("Advanced Settings",
+            icon = ImageGetter.getImage("OtherIcons/Settings").apply { setSize(20f, 20f) },
+            startsOutOpened = false, defaultPad = 0f) {
             addAdvancedControls(it)
         }
         add(expander).padTop(10f).colspan(2).growX().row()
@@ -477,7 +484,7 @@ class MapParametersTable(
             table.add(checkbox).colspan(2).row()
         }
         if (forMapEditor) {
-            addCheckBox("Randomize seed", true) {
+            addCheckBox("Randomize seed", randomizeSeed) {
                 randomizeSeed = it
             }
         }

@@ -84,6 +84,7 @@ class GameSettings {
 
     //// Performance
     var continuousRendering = false
+    var disableNewerRendering = false
 
     //// Experimental
     var unitMovementButtonAnimation = false
@@ -117,6 +118,7 @@ class GameSettings {
     var automatedUnitsCanUpgrade = false
     var automatedUnitsChoosePromotions = false
     var citiesAutoBombardAtEndOfTurn = false
+    var autoAssignSpecialistsInNewCities = true
 
     //// Autoplay
     var autoPlay = GameSettingsAutoPlay()
@@ -250,9 +252,17 @@ class GameSettings {
         return Collator.getInstance(getCurrentLocale())
     }
 
+    /** A NumberFormat for the chosen [language] - cached instance, do not mutate */
     @Readonly
     fun getCurrentNumberFormat(): NumberFormat {
         return LocaleCode.getNumberFormatFromLanguage(language)
+    }
+
+    /** A NumberFormat for the chosen [language] - mutable and can be configured in [block] right away */
+    fun getAndModifyCurrentNumberFormat(block: (NumberFormat.() -> Unit)?): NumberFormat {
+        val formatter = LocaleCode.getNumberFormatFromLanguage(language).clone() as NumberFormat
+        if (block != null) formatter.block()
+        return formatter
     }
 
     //endregion

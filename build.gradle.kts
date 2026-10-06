@@ -74,11 +74,19 @@ allprojects {
             "io.ktor.http.Parameters.get",
 
             "java.util.BitSet.clone",
+
+            "kotlin.collections.orEmpty",
+            "kotlin.collections.toTypedArray",
         )
         wellKnownPureClasses = setOf(
         )
         wellKnownInternalStateClasses = setOf(
             "com.badlogic.gdx.math.Vector2",
+            "kotlin.collections.ArrayDeque",
+            "java.util.PriorityQueue",
+        )
+        wellKnownNewInstanceFunctions = setOf(
+            "kotlin.text.split"
         )
         warnOnPossibleAnnotations = false
     }
@@ -184,6 +192,8 @@ project(":core") {
         "implementation"(rootProject.libs.kotlin.reflect)
 
         "implementation"(rootProject.libs.purity.annotations)
+        // androidx isn't actually android-specific and core/desktop are safe to depend on it
+        "implementation"(rootProject.libs.androidx.collection)
 
         "api"(rootProject.libs.bundles.ktor.client)
     }
