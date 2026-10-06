@@ -1,9 +1,11 @@
 package com.unciv.ui.screens.pickerscreens
 
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.scenes.scene2d.Action
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Group
 import com.badlogic.gdx.scenes.scene2d.Touchable
+import com.badlogic.gdx.scenes.scene2d.actions.Actions
 import com.badlogic.gdx.scenes.scene2d.ui.Cell
 import com.badlogic.gdx.scenes.scene2d.ui.Image
 import com.badlogic.gdx.scenes.scene2d.ui.Table
@@ -162,6 +164,7 @@ class PolicyPickerScreen(
 
     private val policyNameToButton = HashMap<String, PolicyButton>()
     private var selectedPolicyButton: PolicyButton? = null
+    var pendingPopup: Action? = null
 
     init {
         val branchToGroup = HashMap<String, BranchGroup>()
@@ -563,6 +566,11 @@ class PolicyPickerScreen(
         return header
     }
 
+    private fun cancelPendingBranchPopup() {
+        pendingPopup?.let { it.actor?.removeAction(it) }
+        pendingPopup = null
+    }
+
     private fun getTopButton(branch: PolicyBranch): Table {
 
         val text: String
@@ -639,16 +647,26 @@ class PolicyPickerScreen(
         table.pack()
         lockIcon.setPosition(table.width, table.height / 2 - lockIcon.height/2)
 
+        fun adoptBranch() {
+            viewingCiv.policies.adopt(branch, false)
+            game.replaceCurrentScreen{ recreate() }
+        }
         table.onClick {
-            if (branch.isPickable(viewingCiv, canChangeState))
+            if (!branch.isPickable(viewingCiv, canChangeState)) return@onClick
+            cancelPendingBranchPopup()
+            pendingPopup = Actions.delay(0.3f, Actions.run {
                 ConfirmPopup(
-                    this,
+                    this@PolicyPickerScreen,
                     "Are you sure you want to adopt [${branch.name}]?",
-                    "Adopt", true, action = {
-                        viewingCiv.policies.adopt(branch, false)
-                        game.replaceCurrentScreen{ recreate() }
-                    }
+                    "Adopt", true, action = ::adoptBranch
                 ).open(force = true)
+            })
+            table.addAction(pendingPopup)
+        }
+        table.onDoubleClick {
+            cancelPendingBranchPopup()
+            if (branch.isPickable(viewingCiv, canChangeState))
+                adoptBranch()
         }
 
         return table
